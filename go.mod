@@ -2,11 +2,12 @@ module intelligent-cluster-optimizer
 
 go 1.24.0
 
-toolchain go1.24.10
+toolchain go1.24.1
 
 require (
 	k8s.io/apimachinery v0.34.2
 	k8s.io/client-go v0.34.2
+	k8s.io/metrics v0.34.2
 )
 
 require (
