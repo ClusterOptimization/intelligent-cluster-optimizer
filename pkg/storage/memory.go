@@ -2,7 +2,9 @@ package storage
 
 import (
 	"sync"
-    "intelligent-cluster-optimizer/pkg/models"
+	"intelligent-cluster-optimizer/pkg/models"
+	"encoding/json"
+	"os"
 )
 
 type InMemoryStorage struct {
@@ -16,19 +18,30 @@ func NewStorage() *InMemoryStorage {
 	}
 }
 
-func (s *InMemoryStorage) Add(metric models.PodMetric) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	
-    // Append new metric to the list for this pod
-	s.history[metric.PodName] = append(s.history[metric.PodName], metric)
-    
-    // Optional: Prune old data if list gets too long (e.g., > 100 items)
+// SaveToFile writes the current history map to a JSON file
+func (s *InMemoryStorage) SaveToFile(filename string) error {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	data, err := json.MarshalIndent(s.history, "", " ")		// map to json
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(filename, data, 0644)		// write to disk
 }
 
-func (s *InMemoryStorage) GetAll() map[string][]models.PodMetric {
-    s.mu.RLock()
-    defer s.mu.RUnlock()
-    // Return a copy or direct reference (careful with concurrency)
-    return s.history
+// LoadFromFile reads a JSON file and restores the history map
+func (s *InMemoryStorage) LoadFromFile(filename string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil		// file not exists
+		}
+		return err
+	}
+	return json.Unmarshal(data, &s.history)		// json to map
 }

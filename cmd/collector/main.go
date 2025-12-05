@@ -9,7 +9,7 @@ import (
 
 	"k8s.io/client-go/tools/clientcmd"
     
-    // Import your local packages
+    // Import local packages
     "intelligent-cluster-optimizer/pkg/metrics"
     "intelligent-cluster-optimizer/pkg/storage"
 )
@@ -28,7 +28,26 @@ func main() {
 		log.Fatal(err)
 	}
     
+    // initialize storage
     store := storage.NewStorage()
+    dataFile := "metrics_data.json"
+
+    // load existing data on startup
+    if err := store.LoadFromFile(dataFile); err != nil {
+        log.Printf("Warning: Could not load old data: %v", err)
+    } else {
+        fmt.Println("Loaded historical data from disk.")
+    }
+
+    // save data automatically when the program exits
+    defer func() {
+        fmt.Println("Saving data to disk...")
+        if err := store.SaveToFile(dataFile); err != nil {
+            log.Printf("Error: Saving data: %v", err)
+        } else {
+            fmt.Println("Data saved successfully.")
+        }
+    }()
 
     // 3. Start the Loop (Ticker)
     ticker := time.NewTicker(10 * time.Second) // Poll every 10 seconds
