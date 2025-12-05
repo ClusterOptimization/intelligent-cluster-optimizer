@@ -1,59 +1,54 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"os"
 	"path/filepath"
+	"time"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
-	metricsv "k8s.io/metrics/pkg/client/clientset/versioned"
+    
+    // Import your local packages
+    "intelligent-cluster-optimizer/pkg/metrics"
+    "intelligent-cluster-optimizer/pkg/storage"
 )
 
 func main() {
+    // 1. Setup Kubeconfig
 	kubeconfig := filepath.Join(os.Getenv("HOME"), ".kube", "config")
 	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	// regular client for pod info
-	clientset, err := kubernetes.NewForConfig(config)
+    // 2. Initialize Components
+	collector, err := metrics.NewCollector(config)
 	if err != nil {
 		log.Fatal(err)
 	}
+    
+    store := storage.NewStorage()
 
-	// metrics client for cpu/memory
-	metricsClient, err := metricsv.NewForConfig(config)
-    if err != nil {
-        log.Fatal(err)
-    }
+    // 3. Start the Loop (Ticker)
+    ticker := time.NewTicker(10 * time.Second) // Poll every 10 seconds
+    defer ticker.Stop()
 
-	// get pods
-	pods, err := clientset.CoreV1().Pods("workload-test").List(context.TODO(), metav1.ListOptions{})
-	if err != nil {
-		log.Fatal(err)
-	}
+    fmt.Println("Starting Metric Collector... (Press Ctrl+C to stop)")
 
-	fmt.Printf("Found %d pods:\n", len(pods.Items))
-
-	// get metrics for each pod
-    for _, pod := range pods.Items {
-        metrics, err := metricsClient.MetricsV1beta1().PodMetricses("workload-test").Get(context.TODO(), pod.Name, metav1.GetOptions{})
+    for range ticker.C {
+        // A. Fetch
+        data, err := collector.GetPodMetrics("workload-test") // Target your test namespace
         if err != nil {
-            fmt.Printf("- %s: (metrics not available)\n", pod.Name)
+            log.Printf("Error fetching metrics: %v", err)
             continue
         }
 
-        fmt.Printf("Pod: %s\n", pod.Name)
-        for _, container := range metrics.Containers {
-            cpu := container.Usage.Cpu().MilliValue()
-            memory := container.Usage.Memory().Value() / (1024 * 1024) // Convert to MB
-            fmt.Printf("  CPU: %dm, Memory: %dMi\n", cpu, memory)
+        // B. Store & Print
+        fmt.Printf("[%s] Collecting metrics for %d pods...\n", time.Now().Format("15:04:05"), len(data))
+        for _, pod := range data {
+            store.Add(pod)
+            fmt.Printf("   -> Pod: %s | CPU: %dm | Mem: %dMi\n", pod.PodName, pod.CPUMillis, pod.MemoryMB)
         }
-        fmt.Println()
     }
 }
