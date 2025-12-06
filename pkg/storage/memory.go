@@ -5,6 +5,7 @@ import (
 	"intelligent-cluster-optimizer/pkg/models"
 	"os"
 	"sync"
+	"time"
 )
 
 type InMemoryStorage struct {
@@ -24,6 +25,35 @@ func (s *InMemoryStorage) Add(metric models.PodMetric) {
 	defer s.mu.Unlock()
 	key := metric.PodName
 	s.history[key] = append(s.history[key], metric)
+}
+
+// Cleanup removes metrics older than maxAge and returns the count of removed entries
+func (s *InMemoryStorage) Cleanup(maxAge time.Duration) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	cutoffTime := time.Now().Add(-maxAge)
+	removedCount := 0
+
+	for podName, metrics := range s.history {
+		var validMetrics []models.PodMetric
+
+		for _, metric := range metrics {
+			if metric.Timestamp.After(cutoffTime) {
+				validMetrics = append(validMetrics, metric)
+			} else {
+				removedCount++
+			}
+		}
+
+		if len(validMetrics) == 0 {
+			delete(s.history, podName)
+		} else {
+			s.history[podName] = validMetrics
+		}
+	}
+
+	return removedCount
 }
 
 // SaveToFile writes the current history map to a JSON file
@@ -52,4 +82,20 @@ func (s *InMemoryStorage) LoadFromFile(filename string) error {
 		return err
 	}
 	return json.Unmarshal(data, &s.history) // json to map
+}
+
+// startGarbageCollector periodically cleans up old metrics from storage
+func (s *InMemoryStorage) StartGarbageCollector(interval time.Duration, maxAge time.Duration) {
+	ticker := time.NewTicker(interval)
+
+	go func() {
+		defer ticker.Stop()
+
+		for range ticker.C {
+			removed := s.Cleanup(maxAge)
+			if removed > 0 {
+				println("[GC] Cleaned up", removed, "old metric entries")
+			}
+		}
+	}()
 }

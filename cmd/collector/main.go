@@ -49,6 +49,8 @@ func main() {
 		}
 	}()
 
+	store.StartGarbageCollector(1*time.Hour, 24*time.Hour)
+	
 	// 3. Start the Loop (Ticker)
 	ticker := time.NewTicker(10 * time.Second) // Poll every 10 seconds
 	defer ticker.Stop()
