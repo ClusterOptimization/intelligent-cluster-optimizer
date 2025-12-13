@@ -88,21 +88,32 @@ func main() {
 
 		// B. Store & Print
 		fmt.Printf("[%s] Collecting metrics for %d pods...\n", time.Now().Format("15:04:05"), len(data))
+
+		activePodNames := make([]string, 0, len(data))
+
 		for _, pod := range data {
 			// store the whole pod structure (includes containers)
 			store.Add(pod)
+			activePodNames = append(activePodNames, pod.PodName)
+
 			fmt.Printf("Pod: %s\n", pod.PodName)
 
 			// loop through containers, where data is placed
 			for _, container := range pod.Containers {
 				fmt.Printf("   └─ %s\n", container.ContainerName)
 
-				// print usage-request-limit 
+				// print usage-request-limit
 				fmt.Printf("      Usage:   CPU: %4dm | Mem: %4dMi\n", container.UsageCPU, container.UsageMemory)
 				fmt.Printf("      Request: CPU: %4dm | Mem: %4dMi\n", container.RequestCPU, container.RequestMemory)
 				fmt.Printf("      Limit:   CPU: %4dm | Mem: %4dMi\n", container.LimitCPU, container.LimitMemory)
 			}
 		}
+
+		deadPodsRemoved := store.SyncPods(activePodNames)
+		if deadPodsRemoved > 0 {
+			fmt.Printf("[SYNC] Removed %d dead pod(s) from storage\n", deadPodsRemoved)
+		}
+
 		fmt.Println("---------------------------------------------------")
 	}
 }

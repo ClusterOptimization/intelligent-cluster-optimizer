@@ -56,6 +56,28 @@ func (s *InMemoryStorage) Cleanup(maxAge time.Duration) int {
 	return removedCount
 }
 
+// SyncPods removes metrics for pods not in the activePodNames list
+func (s *InMemoryStorage) SyncPods(activePodNames []string) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	activeSet := make(map[string]bool, len(activePodNames))
+	for _, name := range activePodNames {
+		activeSet[name] = true
+	}
+
+	removedCount := 0
+
+	for podName := range s.history {
+		if !activeSet[podName] {
+			delete(s.history, podName)
+			removedCount++
+		}
+	}
+
+	return removedCount
+}
+
 // SaveToFile writes the current history map to a JSON file
 func (s *InMemoryStorage) SaveToFile(filename string) error {
 	s.mu.RLock()
