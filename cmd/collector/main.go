@@ -22,7 +22,28 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// 2. Initialize Components
+	// 2. Read Configuration from Environment Variables (12-Factor App)
+	namespace := os.Getenv("TARGET_NAMESPACE")
+	if namespace == "" {
+		namespace = "default" // Default namespace
+	}
+
+	pollIntervalStr := os.Getenv("POLL_INTERVAL")
+	if pollIntervalStr == "" {
+		pollIntervalStr = "30s" // Default poll interval
+	}
+
+	pollInterval, err := time.ParseDuration(pollIntervalStr)
+	if err != nil {
+		log.Fatalf("Invalid POLL_INTERVAL format '%s': %v. Use format like '30s', '1m', '2m30s'", pollIntervalStr, err)
+	}
+
+	fmt.Printf("Configuration:\n")
+	fmt.Printf("  - Target Namespace: %s\n", namespace)
+	fmt.Printf("  - Poll Interval: %s\n", pollInterval)
+	fmt.Println()
+
+	// 3. Initialize Components
 	collector, err := metrics.NewCollector(config)
 	if err != nil {
 		log.Fatal(err)
@@ -50,16 +71,16 @@ func main() {
 	}()
 
 	store.StartGarbageCollector(1*time.Hour, 24*time.Hour)
-	
-	// 3. Start the Loop (Ticker)
-	ticker := time.NewTicker(10 * time.Second) // Poll every 10 seconds
+
+	// 4. Start the Loop (Ticker)
+	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
 
 	fmt.Println("Starting Metric Collector... (Press Ctrl+C to stop)")
 
 	for range ticker.C {
 		// A. Fetch
-		data, err := collector.GetPodMetrics("workload-test") // Target your test namespace
+		data, err := collector.GetPodMetrics(namespace)
 		if err != nil {
 			log.Printf("Error fetching metrics: %v", err)
 			continue
