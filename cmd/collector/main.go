@@ -70,7 +70,7 @@ func main() {
 		}
 	}()
 
-	store.StartGarbageCollector(1*time.Hour, 24*time.Hour)
+	go store.StartGarbageCollector(1*time.Hour, 24*time.Hour)
 
 	// 4. Start the Loop (Ticker)
 	ticker := time.NewTicker(pollInterval)
@@ -89,14 +89,20 @@ func main() {
 		// B. Store & Print
 		fmt.Printf("[%s] Collecting metrics for %d pods...\n", time.Now().Format("15:04:05"), len(data))
 		for _, pod := range data {
+			// store the whole pod structure (includes containers)
 			store.Add(pod)
-			fmt.Printf("📦 Pod: %s | Total CPU: %dm | Mem: %dMi | Containers: %d\n",
-				pod.PodName, pod.CPUMillis, pod.MemoryMB, len(pod.Containers))
+			fmt.Printf("Pod: %s\n", pod.PodName)
 
+			// loop through containers, where data is placed
 			for _, container := range pod.Containers {
-				fmt.Printf("   └─ %s | CPU: %dm | Mem: %dMi\n",
-					container.ContainerName, container.CPUMillis, container.MemoryMB)
+				fmt.Printf("   └─ %s\n", container.ContainerName)
+
+				// print usage-request-limit 
+				fmt.Printf("      Usage:   CPU: %4dm | Mem: %4dMi\n", container.UsageCPU, container.UsageMemory)
+				fmt.Printf("      Request: CPU: %4dm | Mem: %4dMi\n", container.RequestCPU, container.RequestMemory)
+				fmt.Printf("      Limit:   CPU: %4dm | Mem: %4dMi\n", container.LimitCPU, container.LimitMemory)
 			}
 		}
+		fmt.Println("---------------------------------------------------")
 	}
 }
