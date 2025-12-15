@@ -1,0 +1,407 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: optimizerconfigs.optimizer.cluster.io
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.13.0
+spec:
+  group: optimizer.cluster.io
+  names:
+    kind: OptimizerConfig
+    listKind: OptimizerConfigList
+    plural: optimizerconfigs
+    singular: optimizerconfig
+    shortNames:
+      - optconfig
+      - oc
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      # Status subresource for better Kubernetes integration
+      subresources:
+        status: {}
+      # Additional printer columns for kubectl get
+      additionalPrinterColumns:
+        - name: Strategy
+          type: string
+          description: Optimization strategy
+          jsonPath: .spec.strategy
+        - name: Dry-Run
+          type: boolean
+          description: Whether dry-run mode is enabled
+          jsonPath: .spec.dryRun
+        - name: Phase
+          type: string
+          description: Current operational phase
+          jsonPath: .status.phase
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      schema:
+        openAPIV3Schema:
+          type: object
+          description: OptimizerConfig defines the configuration for the cluster optimizer
+          properties:
+            apiVersion:
+              type: string
+              description: 'APIVersion defines the versioned schema of this representation
+                of an object. Servers should convert recognized schemas to the latest
+                internal value, and may reject unrecognized values.'
+            kind:
+              type: string
+              description: 'Kind is a string value representing the REST resource this
+                object represents. Servers may infer this from the endpoint the client
+                submits requests to.'
+            metadata:
+              type: object
+            spec:
+              type: object
+              description: OptimizerConfigSpec defines the desired state of OptimizerConfig
+              required:
+                - targetNamespaces
+                - strategy
+              properties:
+                # Core Configuration
+                enabled:
+                  type: boolean
+                  description: Enable or disable the optimizer for this configuration
+                  default: true
+
+                targetNamespaces:
+                  type: array
+                  description: List of namespaces to monitor and optimize
+                  minItems: 1
+                  items:
+                    type: string
+                    pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'
+                  example:
+                    - default
+                    - production
+
+                strategy:
+                  type: string
+                  description: Optimization strategy that controls how aggressive the optimizer is
+                  enum:
+                    - aggressive
+                    - balanced
+                    - conservative
+                  default: balanced
+
+                # Safety Settings
+                dryRun:
+                  type: boolean
+                  description: If true, only log recommendations without applying changes
+                  default: false
+
+                maintenanceWindows:
+                  type: array
+                  description: Maintenance windows during which updates are allowed
+                  items:
+                    type: object
+                    required:
+                      - schedule
+                      - duration
+                    properties:
+                      schedule:
+                        type: string
+                        description: Cron expression for maintenance window start time (UTC)
+                        pattern: '^(@(annually|yearly|monthly|weekly|daily|hourly|reboot))|(@every (\d+(ns|us|µs|ms|s|m|h))+)|((((\d+,)+\d+|(\d+(\/|-)\d+)|\d+|\*) ?){5,7})$'
+                        example: "0 2 * * 0"
+                      duration:
+                        type: string
+                        description: Duration of the maintenance window (e.g., 2h, 30m)
+                        pattern: '^([0-9]+(\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$'
+                        example: "4h"
+                      timezone:
+                        type: string
+                        description: Timezone for the schedule (IANA timezone database format)
+                        default: "UTC"
+                        example: "America/New_York"
+
+                # Resource Thresholds
+                resourceThresholds:
+                  type: object
+                  description: Minimum and maximum resource thresholds for recommendations
+                  properties:
+                    cpu:
+                      type: object
+                      properties:
+                        min:
+                          type: string
+                          description: Minimum CPU request (e.g., 100m, 0.1)
+                          pattern: '^([0-9]+m|[0-9]+(\.[0-9]+)?)$'
+                          default: "10m"
+                        max:
+                          type: string
+                          description: Maximum CPU request (e.g., 8000m, 8)
+                          pattern: '^([0-9]+m|[0-9]+(\.[0-9]+)?)$'
+                          default: "16"
+                    memory:
+                      type: object
+                      properties:
+                        min:
+                          type: string
+                          description: Minimum memory request (e.g., 64Mi, 128Mi)
+                          pattern: '^([0-9]+)(E|P|T|G|M|K|Ei|Pi|Ti|Gi|Mi|Ki)?$'
+                          default: "64Mi"
+                        max:
+                          type: string
+                          description: Maximum memory request (e.g., 32Gi, 64Gi)
+                          pattern: '^([0-9]+)(E|P|T|G|M|K|Ei|Pi|Ti|Gi|Mi|Ki)?$'
+                          default: "64Gi"
+
+                # Recommendation Settings
+                recommendations:
+                  type: object
+                  description: Configuration for how recommendations are calculated
+                  properties:
+                    cpuPercentile:
+                      type: integer
+                      description: Percentile to use for CPU recommendations (e.g., 95 for p95)
+                      minimum: 50
+                      maximum: 99
+                      default: 95
+                    memoryPercentile:
+                      type: integer
+                      description: Percentile to use for memory recommendations
+                      minimum: 50
+                      maximum: 99
+                      default: 95
+                    minSamples:
+                      type: integer
+                      description: Minimum number of metric samples required before making recommendations
+                      minimum: 10
+                      default: 100
+                    safetyMargin:
+                      type: number
+                      description: Multiplier for safety margin (e.g., 1.2 = 20% buffer)
+                      minimum: 1.0
+                      maximum: 3.0
+                      default: 1.2
+                    historyDuration:
+                      type: string
+                      description: How far back to look for metrics (e.g., 24h, 7d)
+                      pattern: '^([0-9]+(\.[0-9]+)?(ns|us|µs|ms|s|m|h|d))+$'
+                      default: "24h"
+
+                # Update Strategy
+                updateStrategy:
+                  type: object
+                  description: Strategy for applying resource updates
+                  properties:
+                    type:
+                      type: string
+                      description: Type of update strategy
+                      enum:
+                        - InPlace
+                        - RollingUpdate
+                      default: "InPlace"
+                    rollingUpdate:
+                      type: object
+                      description: Rolling update configuration (only used if type=RollingUpdate)
+                      properties:
+                        maxUnavailable:
+                          type: string
+                          description: Maximum number or percentage of pods that can be unavailable
+                          pattern: '^([0-9]+|[0-9]+%)$'
+                          default: "25%"
+                        maxSurge:
+                          type: string
+                          description: Maximum number or percentage of pods that can be created above desired
+                          pattern: '^([0-9]+|[0-9]+%)$'
+                          default: "25%"
+
+                # Kubernetes Awareness
+                hpaAwareness:
+                  type: object
+                  description: Configuration for HorizontalPodAutoscaler awareness
+                  properties:
+                    enabled:
+                      type: boolean
+                      description: Enable HPA conflict detection
+                      default: true
+                    conflictPolicy:
+                      type: string
+                      description: How to handle conflicts with existing HPAs
+                      enum:
+                        - Skip
+                        - Override
+                        - Warn
+                      default: "Skip"
+
+                pdbAwareness:
+                  type: object
+                  description: Configuration for PodDisruptionBudget awareness
+                  properties:
+                    enabled:
+                      type: boolean
+                      description: Enable PDB validation before updates
+                      default: true
+                    respectMinAvailable:
+                      type: boolean
+                      description: Respect PDB minAvailable constraints
+                      default: true
+
+                # Circuit Breaker
+                circuitBreaker:
+                  type: object
+                  description: Circuit breaker configuration to prevent cascading failures
+                  properties:
+                    enabled:
+                      type: boolean
+                      description: Enable circuit breaker
+                      default: true
+                    errorThreshold:
+                      type: integer
+                      description: Number of consecutive errors before opening circuit
+                      minimum: 1
+                      maximum: 20
+                      default: 5
+                    successThreshold:
+                      type: integer
+                      description: Number of consecutive successes to close circuit
+                      minimum: 1
+                      maximum: 10
+                      default: 3
+                    timeout:
+                      type: string
+                      description: How long to wait before attempting half-open state
+                      pattern: '^([0-9]+(\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$'
+                      default: "5m"
+
+                # Target Resources
+                targetResources:
+                  type: array
+                  description: Types of resources to optimize
+                  items:
+                    type: string
+                    enum:
+                      - deployments
+                      - statefulsets
+                      - daemonsets
+                  default:
+                    - deployments
+                    - statefulsets
+
+                # Exclusions
+                excludeWorkloads:
+                  type: array
+                  description: Workload name patterns to exclude from optimization (regex supported)
+                  items:
+                    type: string
+                  example:
+                    - "^kube-.*"
+                    - "monitoring-.*"
+
+            status:
+              type: object
+              description: OptimizerConfigStatus defines the observed state of OptimizerConfig
+              properties:
+                phase:
+                  type: string
+                  description: Current operational phase
+                  enum:
+                    - Pending
+                    - Active
+                    - Paused
+                    - CircuitOpen
+                    - Error
+
+                observedGeneration:
+                  type: integer
+                  format: int64
+                  description: The generation observed by the controller
+
+                lastRecommendationTime:
+                  type: string
+                  format: date-time
+                  description: Timestamp of last recommendation calculation
+
+                lastUpdateTime:
+                  type: string
+                  format: date-time
+                  description: Timestamp of last applied update
+
+                circuitState:
+                  type: string
+                  description: Current circuit breaker state
+                  enum:
+                    - Closed
+                    - Open
+                    - HalfOpen
+                  default: "Closed"
+
+                consecutiveErrors:
+                  type: integer
+                  description: Number of consecutive errors (for circuit breaker)
+                  default: 0
+
+                consecutiveSuccesses:
+                  type: integer
+                  description: Number of consecutive successes (for circuit breaker)
+                  default: 0
+
+                totalRecommendations:
+                  type: integer
+                  description: Total number of recommendations generated
+                  default: 0
+
+                totalUpdatesApplied:
+                  type: integer
+                  description: Total number of updates successfully applied
+                  default: 0
+
+                totalUpdatesFailed:
+                  type: integer
+                  description: Total number of updates that failed
+                  default: 0
+
+                conditions:
+                  type: array
+                  description: Conditions represent the latest available observations of the optimizer's state
+                  items:
+                    type: object
+                    required:
+                      - type
+                      - status
+                      - lastTransitionTime
+                    properties:
+                      type:
+                        type: string
+                        description: Type of condition
+                        enum:
+                          - Ready
+                          - HPAConflict
+                          - PDBViolation
+                          - MaintenanceWindow
+                          - CircuitBreakerOpen
+                          - MetricsAvailable
+                      status:
+                        type: string
+                        description: Status of the condition (True, False, Unknown)
+                        enum:
+                          - "True"
+                          - "False"
+                          - Unknown
+                      lastTransitionTime:
+                        type: string
+                        format: date-time
+                        description: Last time the condition transitioned
+                      reason:
+                        type: string
+                        description: Machine-readable reason for the condition's last transition
+                      message:
+                        type: string
+                        description: Human-readable message indicating details about last transition
+
+                activeMaintenanceWindow:
+                  type: boolean
+                  description: Whether currently in a maintenance window
+                  default: false
+
+                nextMaintenanceWindow:
+                  type: string
+                  format: date-time
+                  description: Timestamp of next scheduled maintenance window
