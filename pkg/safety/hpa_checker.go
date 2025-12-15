@@ -57,21 +57,28 @@ func (h *HPAChecker) CheckHPAConflict(ctx context.Context, namespace, kind, name
 }
 
 func (h *HPAChecker) isTargetingWorkload(hpa *autoscalingv2.HorizontalPodAutoscaler, kind, name string) bool {
-	if hpa.Spec.ScaleTargetRef.Name != name {
-		return false
-	}
-
 	targetKind := hpa.Spec.ScaleTargetRef.Kind
+	kindMatches := false
 	switch kind {
 	case "Deployment":
-		return targetKind == "Deployment"
+		kindMatches = targetKind == "Deployment"
 	case "StatefulSet":
-		return targetKind == "StatefulSet"
+		kindMatches = targetKind == "StatefulSet"
 	case "DaemonSet":
-		return targetKind == "DaemonSet"
+		kindMatches = targetKind == "DaemonSet"
 	default:
 		return false
 	}
+
+	if !kindMatches {
+		return false
+	}
+
+	if name == "" {
+		return true
+	}
+
+	return hpa.Spec.ScaleTargetRef.Name == name
 }
 
 func (h *HPAChecker) getConflictingMetrics(hpa *autoscalingv2.HorizontalPodAutoscaler) []string {

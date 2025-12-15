@@ -5,7 +5,7 @@ import (
 	"intelligent-cluster-optimizer/pkg/models"
 	"time"
 
-	corev1 "k8s.io/api/core/v1"		// for pod/container structure
+	corev1 "k8s.io/api/core/v1" // for pod/container structure
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -14,11 +14,11 @@ import (
 
 type MetricsCollector struct {
 	MetricsClient *metricsv.Clientset
-	Clientset     *kubernetes.Clientset		// standard client to access pod specs
+	Clientset     *kubernetes.Clientset // standard client to access pod specs
 }
 
 func NewCollector(config *rest.Config) (*MetricsCollector, error) {
-	
+
 	// Create metrics client
 	metricsClient, err := metricsv.NewForConfig(config)
 	if err != nil {
@@ -26,7 +26,7 @@ func NewCollector(config *rest.Config) (*MetricsCollector, error) {
 	}
 
 	// Create standard kubernetes client
-	clientset, err := kubernetes.NewForConfig(config) 
+	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
 		return nil, err
 	}
@@ -93,7 +93,7 @@ func (c *MetricsCollector) GetPodMetrics(namespace string) ([]models.PodMetric, 
 			// Add to list
 			containerMetrics = append(containerMetrics, models.ContainerMetric{
 				ContainerName: containerUsage.Name,
-				
+
 				// Usage (Real-time)
 				UsageCPU:    containerUsage.Usage.Cpu().MilliValue(),
 				UsageMemory: containerUsage.Usage.Memory().Value() / (1024 * 1024),

@@ -4,7 +4,9 @@ import (
 	"context"
 	"flag"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	"intelligent-cluster-optimizer/pkg/apis/optimizer/v1alpha1"
@@ -47,6 +49,10 @@ func main() {
 	flag.DurationVar(&retryPeriod, "retry-period", 2*time.Second, "Retry period")
 	flag.Parse()
 
+	if err := v1alpha1.AddToScheme(scheme.Scheme); err != nil {
+		klog.Fatalf("Failed to register OptimizerConfig scheme: %v", err)
+	}
+
 	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
 	if err != nil {
 		klog.Fatalf("Failed to build config: %v", err)
@@ -66,6 +72,8 @@ func main() {
 	eventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{
 		Interface: kubeClient.CoreV1().Events(""),
 	})
+	defer eventBroadcaster.Shutdown()
+
 	eventRecorder := eventBroadcaster.NewRecorder(scheme.Scheme, corev1.EventSource{
 		Component: "optimizer-controller",
 	})
@@ -73,7 +81,16 @@ func main() {
 	reconciler := controller.NewReconciler(kubeClient, eventRecorder)
 	ctrl := controller.NewOptimizerController(kubeClient, optimizerClient, reconciler, eventRecorder, namespace)
 
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		sig := <-sigChan
+		klog.Infof("Received signal %v, shutting down gracefully", sig)
+		cancel()
+	}()
 
 	if !leaderElect {
 		klog.Info("Running without leader election")

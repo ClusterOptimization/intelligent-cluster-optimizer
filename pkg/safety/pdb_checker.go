@@ -36,6 +36,25 @@ func NewPDBChecker(kubeClient kubernetes.Interface) *PDBChecker {
 }
 
 func (p *PDBChecker) CheckPDBSafety(ctx context.Context, namespace, kind, name string, plannedDisruption int32) (*PDBCheckResult, error) {
+	if name == "" {
+		pdbList, err := p.kubeClient.PolicyV1().PodDisruptionBudgets(namespace).List(ctx, metav1.ListOptions{})
+		if err != nil {
+			return nil, fmt.Errorf("failed to list PDBs: %v", err)
+		}
+		if len(pdbList.Items) == 0 {
+			return &PDBCheckResult{
+				HasPDB:  false,
+				IsSafe:  true,
+				Message: "No PDBs found in namespace",
+			}, nil
+		}
+		return &PDBCheckResult{
+			HasPDB:  true,
+			IsSafe:  true,
+			Message: fmt.Sprintf("Found %d PDB(s) in namespace, per-workload validation will occur during apply", len(pdbList.Items)),
+		}, nil
+	}
+
 	workloadLabels, currentReplicas, availableReplicas, err := p.getWorkloadInfo(ctx, namespace, kind, name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get workload info: %v", err)

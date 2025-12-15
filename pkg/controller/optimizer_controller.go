@@ -8,6 +8,7 @@ import (
 	optimizerv1alpha1 "intelligent-cluster-optimizer/pkg/apis/optimizer/v1alpha1"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -152,10 +153,12 @@ func (c *OptimizerController) syncHandler(ctx context.Context, key string) error
 		return nil
 	}
 
-	config, ok := obj.(*optimizerv1alpha1.OptimizerConfig)
+	original, ok := obj.(*optimizerv1alpha1.OptimizerConfig)
 	if !ok {
 		return fmt.Errorf("unexpected object type: %T", obj)
 	}
+
+	config := original.DeepCopy()
 
 	klog.V(3).Infof("Reconciling OptimizerConfig %s/%s", namespace, name)
 
@@ -169,7 +172,7 @@ func (c *OptimizerController) syncHandler(ctx context.Context, key string) error
 		c.workqueue.AddAfter(key, result.RequeueAfter)
 	}
 
-	if result.Updated {
+	if result.Updated && !equality.Semantic.DeepEqual(original.Status, config.Status) {
 		_, err = c.optimizerClient.UpdateStatus(ctx, config, metav1.UpdateOptions{})
 		if err != nil {
 			return fmt.Errorf("failed to update status: %v", err)
