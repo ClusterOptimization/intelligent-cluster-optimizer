@@ -5,6 +5,7 @@ import (
 	"time"
 
 	optimizerv1alpha1 "intelligent-cluster-optimizer/pkg/apis/optimizer/v1alpha1"
+	"intelligent-cluster-optimizer/pkg/applier"
 	"intelligent-cluster-optimizer/pkg/safety"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -18,14 +19,18 @@ type ReconcileResult struct {
 }
 
 type Reconciler struct {
+	kubeClient kubernetes.Interface
 	hpaChecker *safety.HPAChecker
 	pdbChecker *safety.PDBChecker
+	applier    *applier.Applier
 }
 
 func NewReconciler(kubeClient kubernetes.Interface) *Reconciler {
 	return &Reconciler{
+		kubeClient: kubeClient,
 		hpaChecker: safety.NewHPAChecker(kubeClient),
 		pdbChecker: safety.NewPDBChecker(kubeClient),
+		applier:    applier.NewApplier(kubeClient),
 	}
 }
 
@@ -61,8 +66,16 @@ func (r *Reconciler) Reconcile(ctx context.Context, config *optimizerv1alpha1.Op
 		}
 	}
 
+	mode := "LIVE"
 	if config.Spec.DryRun {
-		klog.V(3).Infof("OptimizerConfig %s/%s in dry-run mode", config.Namespace, config.Name)
+		mode = "DRY-RUN"
+		klog.Infof("OptimizerConfig %s/%s running in DRY-RUN mode - no changes will be applied", config.Namespace, config.Name)
+	} else {
+		klog.Infof("OptimizerConfig %s/%s running in LIVE mode - changes will be applied", config.Namespace, config.Name)
+	}
+
+	if err := r.processRecommendations(ctx, config, mode); err != nil {
+		klog.Warningf("Failed to process recommendations: %v", err)
 	}
 
 	if config.Spec.HPAAwareness != nil && config.Spec.HPAAwareness.Enabled {
@@ -214,6 +227,39 @@ func (r *Reconciler) checkPDBViolations(ctx context.Context, config *optimizerv1
 	}
 
 	return hasViolations, nil
+}
+
+func (r *Reconciler) processRecommendations(ctx context.Context, config *optimizerv1alpha1.OptimizerConfig, mode string) error {
+	klog.V(4).Infof("[%s] Processing recommendations for OptimizerConfig %s/%s", mode, config.Namespace, config.Name)
+
+	sampleRec := &applier.ResourceRecommendation{
+		Namespace:         config.Spec.TargetNamespaces[0],
+		WorkloadKind:      "Deployment",
+		WorkloadName:      "example-app",
+		ContainerName:     "app",
+		CurrentCPU:        "100m",
+		RecommendedCPU:    "200m",
+		CurrentMemory:     "128Mi",
+		RecommendedMemory: "256Mi",
+	}
+
+	applyResult, err := r.applier.Apply(ctx, sampleRec, config.Spec.DryRun)
+	if err != nil {
+		return err
+	}
+
+	if config.Spec.DryRun {
+		klog.V(3).Infof("[DRY-RUN] Summary: %d changes would be applied to %s/%s",
+			len(applyResult.Changes), applyResult.WorkloadKind, applyResult.WorkloadName)
+		for _, change := range applyResult.Changes {
+			klog.V(3).Infof("[DRY-RUN]   - %s", change)
+		}
+	} else if applyResult.Applied {
+		klog.Infof("[LIVE] Successfully applied %d changes to %s/%s",
+			len(applyResult.Changes), applyResult.WorkloadKind, applyResult.WorkloadName)
+	}
+
+	return nil
 }
 
 func resourceTypeToKind(resourceType optimizerv1alpha1.TargetResourceType) string {
