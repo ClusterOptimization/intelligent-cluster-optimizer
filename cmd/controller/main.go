@@ -10,11 +10,15 @@ import (
 	"intelligent-cluster-optimizer/pkg/apis/optimizer/v1alpha1"
 	"intelligent-cluster-optimizer/pkg/controller"
 
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/kubernetes/scheme"
+	typedcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/leaderelection"
 	"k8s.io/client-go/tools/leaderelection/resourcelock"
+	"k8s.io/client-go/tools/record"
 	"k8s.io/klog/v2"
 )
 
@@ -58,8 +62,16 @@ func main() {
 		klog.Fatalf("Failed to create optimizer client: %v", err)
 	}
 
-	reconciler := controller.NewReconciler(kubeClient)
-	ctrl := controller.NewOptimizerController(kubeClient, optimizerClient, reconciler, namespace)
+	eventBroadcaster := record.NewBroadcaster()
+	eventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{
+		Interface: kubeClient.CoreV1().Events(""),
+	})
+	eventRecorder := eventBroadcaster.NewRecorder(scheme.Scheme, corev1.EventSource{
+		Component: "optimizer-controller",
+	})
+
+	reconciler := controller.NewReconciler(kubeClient, eventRecorder)
+	ctrl := controller.NewOptimizerController(kubeClient, optimizerClient, reconciler, eventRecorder, namespace)
 
 	ctx := context.Background()
 

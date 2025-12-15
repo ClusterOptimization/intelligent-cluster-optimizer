@@ -13,7 +13,7 @@ import (
 
 func TestReconciler_DisabledConfig(t *testing.T) {
 	client := fake.NewSimpleClientset()
-	r := NewReconciler(client)
+	r := NewReconciler(client, nil)
 	config := &optimizerv1alpha1.OptimizerConfig{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-config",
@@ -42,7 +42,7 @@ func TestReconciler_DisabledConfig(t *testing.T) {
 
 func TestReconciler_InitialReconcile(t *testing.T) {
 	client := fake.NewSimpleClientset()
-	r := NewReconciler(client)
+	r := NewReconciler(client, nil)
 	config := &optimizerv1alpha1.OptimizerConfig{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "test-config",
@@ -72,7 +72,7 @@ func TestReconciler_InitialReconcile(t *testing.T) {
 
 func TestReconciler_CircuitBreakerOpen(t *testing.T) {
 	client := fake.NewSimpleClientset()
-	r := NewReconciler(client)
+	r := NewReconciler(client, nil)
 	config := &optimizerv1alpha1.OptimizerConfig{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "test-config",
@@ -115,7 +115,7 @@ func TestReconciler_CircuitBreakerOpen(t *testing.T) {
 
 func TestReconciler_ActiveReconcile(t *testing.T) {
 	client := fake.NewSimpleClientset()
-	r := NewReconciler(client)
+	r := NewReconciler(client, nil)
 	config := &optimizerv1alpha1.OptimizerConfig{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "test-config",
@@ -176,7 +176,7 @@ func TestReconciler_ActiveReconcile(t *testing.T) {
 
 func TestReconciler_DryRunMode(t *testing.T) {
 	client := fake.NewSimpleClientset()
-	r := NewReconciler(client)
+	r := NewReconciler(client, nil)
 	config := &optimizerv1alpha1.OptimizerConfig{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "test-config",
@@ -206,7 +206,7 @@ func TestReconciler_DryRunMode(t *testing.T) {
 
 func TestReconciler_UpdateCondition(t *testing.T) {
 	client := fake.NewSimpleClientset()
-	r := NewReconciler(client)
+	r := NewReconciler(client, nil)
 	config := &optimizerv1alpha1.OptimizerConfig{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-config",

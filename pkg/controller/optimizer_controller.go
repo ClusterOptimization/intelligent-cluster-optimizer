@@ -14,8 +14,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/kubernetes/scheme"
-	typedcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/workqueue"
@@ -35,15 +33,9 @@ func NewOptimizerController(
 	kubeClient kubernetes.Interface,
 	optimizerClient *optimizerv1alpha1.OptimizerConfigClient,
 	reconciler *Reconciler,
+	eventRecorder record.EventRecorder,
 	namespace string,
 ) *OptimizerController {
-	eventBroadcaster := record.NewBroadcaster()
-	eventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{
-		Interface: kubeClient.CoreV1().Events(""),
-	})
-	recorder := eventBroadcaster.NewRecorder(scheme.Scheme, corev1.EventSource{
-		Component: "optimizer-controller",
-	})
 
 	informer := cache.NewSharedIndexInformer(
 		&cache.ListWatch{
@@ -66,7 +58,7 @@ func NewOptimizerController(
 		workqueue: workqueue.NewTypedRateLimitingQueue(
 			workqueue.DefaultTypedControllerRateLimiter[string](),
 		),
-		eventRecorder: recorder,
+		eventRecorder: eventRecorder,
 		reconciler:    reconciler,
 	}
 

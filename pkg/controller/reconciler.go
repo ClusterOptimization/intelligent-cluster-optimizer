@@ -10,6 +10,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/record"
 	"k8s.io/klog/v2"
 )
 
@@ -19,18 +20,20 @@ type ReconcileResult struct {
 }
 
 type Reconciler struct {
-	kubeClient kubernetes.Interface
-	hpaChecker *safety.HPAChecker
-	pdbChecker *safety.PDBChecker
-	applier    *applier.Applier
+	kubeClient    kubernetes.Interface
+	hpaChecker    *safety.HPAChecker
+	pdbChecker    *safety.PDBChecker
+	applier       *applier.Applier
+	eventRecorder record.EventRecorder
 }
 
-func NewReconciler(kubeClient kubernetes.Interface) *Reconciler {
+func NewReconciler(kubeClient kubernetes.Interface, eventRecorder record.EventRecorder) *Reconciler {
 	return &Reconciler{
-		kubeClient: kubeClient,
-		hpaChecker: safety.NewHPAChecker(kubeClient),
-		pdbChecker: safety.NewPDBChecker(kubeClient),
-		applier:    applier.NewApplier(kubeClient),
+		kubeClient:    kubeClient,
+		hpaChecker:    safety.NewHPAChecker(kubeClient),
+		pdbChecker:    safety.NewPDBChecker(kubeClient),
+		applier:       applier.NewApplier(kubeClient, eventRecorder),
+		eventRecorder: eventRecorder,
 	}
 }
 
