@@ -58,7 +58,7 @@ func main() {
 		klog.Fatalf("Failed to create optimizer client: %v", err)
 	}
 
-	reconciler := controller.NewReconciler()
+	reconciler := controller.NewReconciler(kubeClient)
 	ctrl := controller.NewOptimizerController(kubeClient, optimizerClient, reconciler, namespace)
 
 	ctx := context.Background()

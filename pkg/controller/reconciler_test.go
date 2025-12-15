@@ -8,10 +8,12 @@ import (
 	optimizerv1alpha1 "intelligent-cluster-optimizer/pkg/apis/optimizer/v1alpha1"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/fake"
 )
 
 func TestReconciler_DisabledConfig(t *testing.T) {
-	r := NewReconciler()
+	client := fake.NewSimpleClientset()
+	r := NewReconciler(client)
 	config := &optimizerv1alpha1.OptimizerConfig{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-config",
@@ -39,7 +41,8 @@ func TestReconciler_DisabledConfig(t *testing.T) {
 }
 
 func TestReconciler_InitialReconcile(t *testing.T) {
-	r := NewReconciler()
+	client := fake.NewSimpleClientset()
+	r := NewReconciler(client)
 	config := &optimizerv1alpha1.OptimizerConfig{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "test-config",
@@ -68,7 +71,8 @@ func TestReconciler_InitialReconcile(t *testing.T) {
 }
 
 func TestReconciler_CircuitBreakerOpen(t *testing.T) {
-	r := NewReconciler()
+	client := fake.NewSimpleClientset()
+	r := NewReconciler(client)
 	config := &optimizerv1alpha1.OptimizerConfig{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "test-config",
@@ -110,7 +114,8 @@ func TestReconciler_CircuitBreakerOpen(t *testing.T) {
 }
 
 func TestReconciler_ActiveReconcile(t *testing.T) {
-	r := NewReconciler()
+	client := fake.NewSimpleClientset()
+	r := NewReconciler(client)
 	config := &optimizerv1alpha1.OptimizerConfig{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "test-config",
@@ -170,7 +175,8 @@ func TestReconciler_ActiveReconcile(t *testing.T) {
 }
 
 func TestReconciler_DryRunMode(t *testing.T) {
-	r := NewReconciler()
+	client := fake.NewSimpleClientset()
+	r := NewReconciler(client)
 	config := &optimizerv1alpha1.OptimizerConfig{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "test-config",
@@ -199,7 +205,8 @@ func TestReconciler_DryRunMode(t *testing.T) {
 }
 
 func TestReconciler_UpdateCondition(t *testing.T) {
-	r := NewReconciler()
+	client := fake.NewSimpleClientset()
+	r := NewReconciler(client)
 	config := &optimizerv1alpha1.OptimizerConfig{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-config",

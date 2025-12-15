@@ -5,8 +5,10 @@ import (
 	"time"
 
 	optimizerv1alpha1 "intelligent-cluster-optimizer/pkg/apis/optimizer/v1alpha1"
+	"intelligent-cluster-optimizer/pkg/safety"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
 )
 
@@ -16,11 +18,13 @@ type ReconcileResult struct {
 }
 
 type Reconciler struct {
-	// TODO: Add analyzer, executor, safety checkers when implemented
+	hpaChecker *safety.HPAChecker
 }
 
-func NewReconciler() *Reconciler {
-	return &Reconciler{}
+func NewReconciler(kubeClient kubernetes.Interface) *Reconciler {
+	return &Reconciler{
+		hpaChecker: safety.NewHPAChecker(kubeClient),
+	}
 }
 
 func (r *Reconciler) Reconcile(ctx context.Context, config *optimizerv1alpha1.OptimizerConfig) (*ReconcileResult, error) {
@@ -57,6 +61,26 @@ func (r *Reconciler) Reconcile(ctx context.Context, config *optimizerv1alpha1.Op
 
 	if config.Spec.DryRun {
 		klog.V(3).Infof("OptimizerConfig %s/%s in dry-run mode", config.Namespace, config.Name)
+	}
+
+	if config.Spec.HPAAwareness != nil && config.Spec.HPAAwareness.Enabled {
+		hasConflicts, err := r.checkHPAConflicts(ctx, config)
+		if err != nil {
+			klog.Warningf("Failed to check HPA conflicts: %v", err)
+		} else if hasConflicts {
+			result.Updated = true
+			policy := config.Spec.HPAAwareness.ConflictPolicy
+			if policy == "" || policy == optimizerv1alpha1.HPAConflictPolicySkip {
+				klog.V(3).Infof("HPA conflicts detected for %s/%s, skipping optimization", config.Namespace, config.Name)
+				return result, nil
+			} else if policy == optimizerv1alpha1.HPAConflictPolicyWarn {
+				klog.Warningf("HPA conflicts detected for %s/%s, proceeding with caution", config.Namespace, config.Name)
+			}
+		} else {
+			if err := r.updateCondition(config, optimizerv1alpha1.ConditionTypeHPAConflict, optimizerv1alpha1.ConditionFalse, "NoConflict", "No HPA conflicts detected"); err != nil {
+				return result, err
+			}
+		}
 	}
 
 	if err := r.updatePhase(config, optimizerv1alpha1.OptimizerPhaseActive, "Reconciliation successful"); err != nil {
@@ -114,4 +138,44 @@ func (r *Reconciler) updateCondition(
 	}
 
 	return nil
+}
+
+func (r *Reconciler) checkHPAConflicts(ctx context.Context, config *optimizerv1alpha1.OptimizerConfig) (bool, error) {
+	hasConflicts := false
+
+	for _, ns := range config.Spec.TargetNamespaces {
+		for _, resourceType := range config.Spec.TargetResources {
+			kind := resourceTypeToKind(resourceType)
+			result, err := r.hpaChecker.CheckHPAConflict(ctx, ns, kind, "")
+			if err != nil {
+				return false, err
+			}
+			if result.HasConflict {
+				hasConflicts = true
+				if err := r.updateCondition(config,
+					optimizerv1alpha1.ConditionTypeHPAConflict,
+					optimizerv1alpha1.ConditionTrue,
+					"ConflictDetected",
+					result.Message); err != nil {
+					return false, err
+				}
+				klog.Warningf("HPA conflict in %s/%s: %s", ns, kind, result.Message)
+			}
+		}
+	}
+
+	return hasConflicts, nil
+}
+
+func resourceTypeToKind(resourceType optimizerv1alpha1.TargetResourceType) string {
+	switch resourceType {
+	case optimizerv1alpha1.TargetResourceDeployments:
+		return "Deployment"
+	case optimizerv1alpha1.TargetResourceStatefulSets:
+		return "StatefulSet"
+	case optimizerv1alpha1.TargetResourceDaemonSets:
+		return "DaemonSet"
+	default:
+		return "Deployment"
+	}
 }
