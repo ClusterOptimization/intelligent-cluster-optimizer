@@ -7,6 +7,7 @@ import (
 	optimizerv1alpha1 "intelligent-cluster-optimizer/pkg/apis/optimizer/v1alpha1"
 	"intelligent-cluster-optimizer/pkg/applier"
 	"intelligent-cluster-optimizer/pkg/safety"
+	"intelligent-cluster-optimizer/pkg/scheduler"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -20,20 +21,22 @@ type ReconcileResult struct {
 }
 
 type Reconciler struct {
-	kubeClient    kubernetes.Interface
-	hpaChecker    *safety.HPAChecker
-	pdbChecker    *safety.PDBChecker
-	applier       *applier.Applier
-	eventRecorder record.EventRecorder
+	kubeClient             kubernetes.Interface
+	hpaChecker             *safety.HPAChecker
+	pdbChecker             *safety.PDBChecker
+	applier                *applier.Applier
+	eventRecorder          record.EventRecorder
+	maintenanceWindowCheck *scheduler.MaintenanceWindowChecker
 }
 
 func NewReconciler(kubeClient kubernetes.Interface, eventRecorder record.EventRecorder) *Reconciler {
 	return &Reconciler{
-		kubeClient:    kubeClient,
-		hpaChecker:    safety.NewHPAChecker(kubeClient),
-		pdbChecker:    safety.NewPDBChecker(kubeClient),
-		applier:       applier.NewApplier(kubeClient, eventRecorder),
-		eventRecorder: eventRecorder,
+		kubeClient:             kubeClient,
+		hpaChecker:             safety.NewHPAChecker(kubeClient),
+		pdbChecker:             safety.NewPDBChecker(kubeClient),
+		applier:                applier.NewApplier(kubeClient, eventRecorder),
+		eventRecorder:          eventRecorder,
+		maintenanceWindowCheck: scheduler.NewMaintenanceWindowChecker(),
 	}
 }
 
@@ -67,6 +70,35 @@ func (r *Reconciler) Reconcile(ctx context.Context, config *optimizerv1alpha1.Op
 			result.RequeueAfter = 5 * time.Minute
 			return result, nil
 		}
+	}
+
+	inMaintenanceWindow := r.maintenanceWindowCheck.IsInMaintenanceWindow(config)
+	config.Status.ActiveMaintenanceWindow = inMaintenanceWindow
+
+	if nextWindow := r.maintenanceWindowCheck.GetNextMaintenanceWindow(config); nextWindow != nil {
+		config.Status.NextMaintenanceWindow = &metav1.Time{Time: *nextWindow}
+	}
+
+	if err := r.updateCondition(config, optimizerv1alpha1.ConditionTypeMaintenanceWindow,
+		boolToConditionStatus(inMaintenanceWindow), "MaintenanceWindowCheck",
+		maintenanceWindowMessage(inMaintenanceWindow)); err != nil {
+		return result, err
+	}
+
+	if !inMaintenanceWindow && len(config.Spec.MaintenanceWindows) > 0 && !config.Spec.DryRun {
+		klog.V(3).Infof("OptimizerConfig %s/%s outside maintenance window, skipping live updates", config.Namespace, config.Name)
+		result.Updated = true
+		if config.Status.NextMaintenanceWindow != nil {
+			timeUntilNext := time.Until(config.Status.NextMaintenanceWindow.Time)
+			if timeUntilNext > 0 && timeUntilNext < 30*time.Minute {
+				result.RequeueAfter = timeUntilNext
+			} else {
+				result.RequeueAfter = 5 * time.Minute
+			}
+		} else {
+			result.RequeueAfter = 5 * time.Minute
+		}
+		return result, nil
 	}
 
 	mode := "LIVE"
@@ -276,4 +308,18 @@ func resourceTypeToKind(resourceType optimizerv1alpha1.TargetResourceType) strin
 	default:
 		return "Deployment"
 	}
+}
+
+func boolToConditionStatus(b bool) optimizerv1alpha1.ConditionStatus {
+	if b {
+		return optimizerv1alpha1.ConditionTrue
+	}
+	return optimizerv1alpha1.ConditionFalse
+}
+
+func maintenanceWindowMessage(inWindow bool) string {
+	if inWindow {
+		return "Currently in maintenance window"
+	}
+	return "Outside maintenance window"
 }
