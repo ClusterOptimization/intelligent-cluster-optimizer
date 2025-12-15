@@ -6,6 +6,7 @@ import (
 
 	optimizerv1alpha1 "intelligent-cluster-optimizer/pkg/apis/optimizer/v1alpha1"
 	"intelligent-cluster-optimizer/pkg/applier"
+	"intelligent-cluster-optimizer/pkg/events"
 	"intelligent-cluster-optimizer/pkg/safety"
 	"intelligent-cluster-optimizer/pkg/scheduler"
 
@@ -26,6 +27,7 @@ type Reconciler struct {
 	pdbChecker             *safety.PDBChecker
 	applier                *applier.Applier
 	eventRecorder          record.EventRecorder
+	optimizerEvents        *events.OptimizerEventRecorder
 	maintenanceWindowCheck *scheduler.MaintenanceWindowChecker
 }
 
@@ -36,6 +38,7 @@ func NewReconciler(kubeClient kubernetes.Interface, eventRecorder record.EventRe
 		pdbChecker:             safety.NewPDBChecker(kubeClient),
 		applier:                applier.NewApplier(kubeClient, eventRecorder),
 		eventRecorder:          eventRecorder,
+		optimizerEvents:        events.NewOptimizerEventRecorder(eventRecorder),
 		maintenanceWindowCheck: scheduler.NewMaintenanceWindowChecker(),
 	}
 }
@@ -87,6 +90,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, config *optimizerv1alpha1.Op
 
 	if !inMaintenanceWindow && len(config.Spec.MaintenanceWindows) > 0 && !config.Spec.DryRun {
 		klog.V(3).Infof("OptimizerConfig %s/%s outside maintenance window, skipping live updates", config.Namespace, config.Name)
+		r.optimizerEvents.RecordWarningEvent(config, events.ReasonMaintenanceWindowSkipped,
+			"Skipping live updates outside maintenance window")
 		result.Updated = true
 		if config.Status.NextMaintenanceWindow != nil {
 			timeUntilNext := time.Until(config.Status.NextMaintenanceWindow.Time)
@@ -122,9 +127,13 @@ func (r *Reconciler) Reconcile(ctx context.Context, config *optimizerv1alpha1.Op
 			policy := config.Spec.HPAAwareness.ConflictPolicy
 			if policy == "" || policy == optimizerv1alpha1.HPAConflictPolicySkip {
 				klog.V(3).Infof("HPA conflicts detected for %s/%s, skipping optimization", config.Namespace, config.Name)
+				r.optimizerEvents.RecordWarningEvent(config, events.ReasonHPAConflictDetected,
+					"HPA conflict detected, skipping optimization")
 				return result, nil
 			} else if policy == optimizerv1alpha1.HPAConflictPolicyWarn {
 				klog.Warningf("HPA conflicts detected for %s/%s, proceeding with caution", config.Namespace, config.Name)
+				r.optimizerEvents.RecordWarningEvent(config, events.ReasonHPAConflictDetected,
+					"HPA conflict detected, proceeding with caution")
 			}
 		} else {
 			if err := r.updateCondition(config, optimizerv1alpha1.ConditionTypeHPAConflict, optimizerv1alpha1.ConditionFalse, "NoConflict", "No HPA conflicts detected"); err != nil {
@@ -141,9 +150,13 @@ func (r *Reconciler) Reconcile(ctx context.Context, config *optimizerv1alpha1.Op
 			result.Updated = true
 			if config.Spec.PDBAwareness.RespectMinAvailable {
 				klog.V(3).Infof("PDB violations detected for %s/%s, skipping optimization", config.Namespace, config.Name)
+				r.optimizerEvents.RecordWarningEvent(config, events.ReasonPDBViolation,
+					"PodDisruptionBudget violation detected, skipping optimization")
 				return result, nil
 			} else {
 				klog.Warningf("PDB violations detected for %s/%s, proceeding anyway", config.Namespace, config.Name)
+				r.optimizerEvents.RecordWarningEvent(config, events.ReasonPDBViolation,
+					"PodDisruptionBudget violation detected, proceeding anyway")
 			}
 		} else {
 			if err := r.updateCondition(config, optimizerv1alpha1.ConditionTypePDBViolation, optimizerv1alpha1.ConditionFalse, "NoViolation", "No PDB violations detected"); err != nil {
@@ -289,9 +302,15 @@ func (r *Reconciler) processRecommendations(ctx context.Context, config *optimiz
 		for _, change := range applyResult.Changes {
 			klog.V(3).Infof("[DRY-RUN]   - %s", change)
 		}
+		if len(applyResult.Changes) > 0 {
+			r.optimizerEvents.RecordNormalEvent(config, events.ReasonDryRunSimulated,
+				"Dry-run simulation completed, no changes applied")
+		}
 	} else if applyResult.Applied {
 		klog.Infof("[LIVE] Successfully applied %d changes to %s/%s",
 			len(applyResult.Changes), applyResult.WorkloadKind, applyResult.WorkloadName)
+		r.optimizerEvents.RecordOptimizationEvent(config, events.ReasonOptimizationApplied,
+			"Successfully applied resource optimization")
 	}
 
 	return nil
