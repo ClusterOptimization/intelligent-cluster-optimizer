@@ -19,11 +19,13 @@ type ReconcileResult struct {
 
 type Reconciler struct {
 	hpaChecker *safety.HPAChecker
+	pdbChecker *safety.PDBChecker
 }
 
 func NewReconciler(kubeClient kubernetes.Interface) *Reconciler {
 	return &Reconciler{
 		hpaChecker: safety.NewHPAChecker(kubeClient),
+		pdbChecker: safety.NewPDBChecker(kubeClient),
 	}
 }
 
@@ -78,6 +80,25 @@ func (r *Reconciler) Reconcile(ctx context.Context, config *optimizerv1alpha1.Op
 			}
 		} else {
 			if err := r.updateCondition(config, optimizerv1alpha1.ConditionTypeHPAConflict, optimizerv1alpha1.ConditionFalse, "NoConflict", "No HPA conflicts detected"); err != nil {
+				return result, err
+			}
+		}
+	}
+
+	if config.Spec.PDBAwareness != nil && config.Spec.PDBAwareness.Enabled {
+		hasViolations, err := r.checkPDBViolations(ctx, config)
+		if err != nil {
+			klog.Warningf("Failed to check PDB violations: %v", err)
+		} else if hasViolations {
+			result.Updated = true
+			if config.Spec.PDBAwareness.RespectMinAvailable {
+				klog.V(3).Infof("PDB violations detected for %s/%s, skipping optimization", config.Namespace, config.Name)
+				return result, nil
+			} else {
+				klog.Warningf("PDB violations detected for %s/%s, proceeding anyway", config.Namespace, config.Name)
+			}
+		} else {
+			if err := r.updateCondition(config, optimizerv1alpha1.ConditionTypePDBViolation, optimizerv1alpha1.ConditionFalse, "NoViolation", "No PDB violations detected"); err != nil {
 				return result, err
 			}
 		}
@@ -165,6 +186,34 @@ func (r *Reconciler) checkHPAConflicts(ctx context.Context, config *optimizerv1a
 	}
 
 	return hasConflicts, nil
+}
+
+func (r *Reconciler) checkPDBViolations(ctx context.Context, config *optimizerv1alpha1.OptimizerConfig) (bool, error) {
+	hasViolations := false
+	plannedDisruption := int32(1)
+
+	for _, ns := range config.Spec.TargetNamespaces {
+		for _, resourceType := range config.Spec.TargetResources {
+			kind := resourceTypeToKind(resourceType)
+			result, err := r.pdbChecker.CheckPDBSafety(ctx, ns, kind, "", plannedDisruption)
+			if err != nil {
+				return false, err
+			}
+			if result.HasPDB && !result.IsSafe {
+				hasViolations = true
+				if err := r.updateCondition(config,
+					optimizerv1alpha1.ConditionTypePDBViolation,
+					optimizerv1alpha1.ConditionTrue,
+					"ViolationDetected",
+					result.Message); err != nil {
+					return false, err
+				}
+				klog.Warningf("PDB violation in %s/%s: %s", ns, kind, result.Message)
+			}
+		}
+	}
+
+	return hasViolations, nil
 }
 
 func resourceTypeToKind(resourceType optimizerv1alpha1.TargetResourceType) string {
