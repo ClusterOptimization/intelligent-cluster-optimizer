@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"intelligent-cluster-optimizer/pkg/rollback"
 	"intelligent-cluster-optimizer/pkg/scaler"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -16,14 +17,16 @@ import (
 )
 
 type Applier struct {
-	kubeClient     kubernetes.Interface
-	verticalScaler *scaler.VerticalScaler
+	kubeClient      kubernetes.Interface
+	verticalScaler  *scaler.VerticalScaler
+	rollbackManager *rollback.RollbackManager
 }
 
 func NewApplier(kubeClient kubernetes.Interface, eventRecorder record.EventRecorder) *Applier {
 	return &Applier{
-		kubeClient:     kubeClient,
-		verticalScaler: scaler.NewVerticalScaler(kubeClient, eventRecorder),
+		kubeClient:      kubeClient,
+		verticalScaler:  scaler.NewVerticalScaler(kubeClient, eventRecorder),
+		rollbackManager: rollback.NewRollbackManager(kubeClient),
 	}
 }
 
@@ -90,6 +93,11 @@ func (a *Applier) LiveApply(ctx context.Context, recommendation *ResourceRecomme
 
 	klog.Infof("[LIVE] Applying changes to %s/%s/%s",
 		recommendation.Namespace, recommendation.WorkloadKind, recommendation.WorkloadName)
+
+	if err := a.rollbackManager.SavePreviousConfig(ctx, recommendation.Namespace, recommendation.WorkloadKind,
+		recommendation.WorkloadName, recommendation.ContainerName); err != nil {
+		klog.Warningf("Failed to save rollback config: %v", err)
+	}
 
 	scaleReq := &scaler.ScaleRequest{
 		Namespace:     recommendation.Namespace,
