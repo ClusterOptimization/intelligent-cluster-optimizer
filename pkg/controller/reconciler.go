@@ -29,6 +29,7 @@ type Reconciler struct {
 	eventRecorder          record.EventRecorder
 	optimizerEvents        *events.OptimizerEventRecorder
 	maintenanceWindowCheck *scheduler.MaintenanceWindowChecker
+	circuitBreaker         *safety.CircuitBreaker
 }
 
 func NewReconciler(kubeClient kubernetes.Interface, eventRecorder record.EventRecorder) *Reconciler {
@@ -40,6 +41,7 @@ func NewReconciler(kubeClient kubernetes.Interface, eventRecorder record.EventRe
 		eventRecorder:          eventRecorder,
 		optimizerEvents:        events.NewOptimizerEventRecorder(eventRecorder),
 		maintenanceWindowCheck: scheduler.NewMaintenanceWindowChecker(),
+		circuitBreaker:         safety.NewCircuitBreaker(),
 	}
 }
 
@@ -64,8 +66,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, config *optimizerv1alpha1.Op
 	}
 
 	if config.Spec.CircuitBreaker != nil && config.Spec.CircuitBreaker.Enabled {
-		if config.Status.CircuitState == optimizerv1alpha1.CircuitStateOpen {
+		if !r.circuitBreaker.ShouldAllow(config) {
 			klog.V(3).Infof("Circuit breaker is open for %s/%s", config.Namespace, config.Name)
+			r.optimizerEvents.RecordWarningEvent(config, events.ReasonCircuitBreakerOpen,
+				"Circuit breaker open, skipping optimization")
 			if err := r.updatePhase(config, optimizerv1alpha1.OptimizerPhaseCircuitOpen, "Circuit breaker open"); err != nil {
 				return result, err
 			}
@@ -116,6 +120,15 @@ func (r *Reconciler) Reconcile(ctx context.Context, config *optimizerv1alpha1.Op
 
 	if err := r.processRecommendations(ctx, config, mode); err != nil {
 		klog.Warningf("Failed to process recommendations: %v", err)
+		if config.Spec.CircuitBreaker != nil && config.Spec.CircuitBreaker.Enabled {
+			if stateChanged := r.circuitBreaker.RecordFailure(config, err); stateChanged {
+				stateName := r.circuitBreaker.GetStateName(config.Status.CircuitState)
+				klog.Warningf("Circuit breaker state changed to %s for %s/%s after error: %v",
+					stateName, config.Namespace, config.Name, err)
+				r.optimizerEvents.RecordWarningEvent(config, "CircuitBreakerStateChanged",
+					"Circuit breaker state: "+stateName)
+			}
+		}
 	}
 
 	if config.Spec.HPAAwareness != nil && config.Spec.HPAAwareness.Enabled {
@@ -176,6 +189,15 @@ func (r *Reconciler) Reconcile(ctx context.Context, config *optimizerv1alpha1.Op
 	config.Status.ObservedGeneration = config.Generation
 	now := metav1.NewTime(time.Now())
 	config.Status.LastRecommendationTime = &now
+
+	if config.Spec.CircuitBreaker != nil && config.Spec.CircuitBreaker.Enabled {
+		if stateChanged := r.circuitBreaker.RecordSuccess(config); stateChanged {
+			stateName := r.circuitBreaker.GetStateName(config.Status.CircuitState)
+			klog.Infof("Circuit breaker state changed to %s for %s/%s", stateName, config.Namespace, config.Name)
+			r.optimizerEvents.RecordNormalEvent(config, "CircuitBreakerStateChanged",
+				"Circuit breaker state: "+stateName)
+		}
+	}
 
 	result.Updated = true
 	result.RequeueAfter = 30 * time.Second
