@@ -29,6 +29,9 @@ type Engine struct {
 
 	// Expected interval between metric samples (for gap detection)
 	expectedSampleInterval time.Duration
+
+	// RecommendationTTL is how long recommendations remain valid
+	RecommendationTTL time.Duration
 }
 
 // NewEngine creates a new recommendation engine with sensible defaults
@@ -42,7 +45,13 @@ func NewEngine() *Engine {
 		costCalculator:          cost.NewCalculator(nil), // Use default pricing
 		confidenceCalculator:    NewConfidenceCalculator(),
 		expectedSampleInterval:  30 * time.Second, // Default: metrics collected every 30s
+		RecommendationTTL:       DefaultRecommendationTTL,
 	}
+}
+
+// SetRecommendationTTL sets the time-to-live for recommendations
+func (e *Engine) SetRecommendationTTL(ttl time.Duration) {
+	e.RecommendationTTL = ttl
 }
 
 // NewEngineWithPricing creates a recommendation engine with custom pricing
@@ -89,6 +98,7 @@ type WorkloadRecommendation struct {
 	WorkloadName string
 	Containers   []ContainerRecommendation
 	GeneratedAt  time.Time
+	ExpiresAt    time.Time // When this recommendation becomes stale
 
 	// Cost estimation for entire workload
 	TotalEstimatedSavings *cost.SavingsEstimate
@@ -97,6 +107,67 @@ type WorkloadRecommendation struct {
 	HasOOMHistory bool
 	TotalOOMCount int
 	OOMPriority   string // Overall priority based on OOM history
+}
+
+// DefaultRecommendationTTL is the default time-to-live for recommendations
+const DefaultRecommendationTTL = 24 * time.Hour
+
+// IsExpired returns true if the recommendation has expired
+func (r *WorkloadRecommendation) IsExpired() bool {
+	if r.ExpiresAt.IsZero() {
+		// If no expiry set, check if older than default TTL
+		return time.Since(r.GeneratedAt) > DefaultRecommendationTTL
+	}
+	return time.Now().After(r.ExpiresAt)
+}
+
+// Age returns how old the recommendation is
+func (r *WorkloadRecommendation) Age() time.Duration {
+	return time.Since(r.GeneratedAt)
+}
+
+// TimeToExpiry returns time until expiry (negative if expired)
+func (r *WorkloadRecommendation) TimeToExpiry() time.Duration {
+	if r.ExpiresAt.IsZero() {
+		return DefaultRecommendationTTL - r.Age()
+	}
+	return time.Until(r.ExpiresAt)
+}
+
+// ExpiryStatus returns a human-readable expiry status
+func (r *WorkloadRecommendation) ExpiryStatus() string {
+	if r.IsExpired() {
+		return fmt.Sprintf("EXPIRED (generated %v ago)", r.Age().Round(time.Minute))
+	}
+	return fmt.Sprintf("Valid for %v", r.TimeToExpiry().Round(time.Minute))
+}
+
+// FilterExpired removes expired recommendations from a slice
+func FilterExpired(recommendations []WorkloadRecommendation) []WorkloadRecommendation {
+	valid := make([]WorkloadRecommendation, 0, len(recommendations))
+	for _, r := range recommendations {
+		if !r.IsExpired() {
+			valid = append(valid, r)
+		}
+	}
+	return valid
+}
+
+// ShouldApply checks if a recommendation should be applied based on expiry and confidence
+func (r *WorkloadRecommendation) ShouldApply(minConfidence float64) (bool, string) {
+	if r.IsExpired() {
+		return false, fmt.Sprintf("recommendation expired %v ago", time.Since(r.ExpiresAt).Round(time.Minute))
+	}
+
+	// Check if any container has sufficient confidence
+	for _, c := range r.Containers {
+		if c.Confidence < minConfidence {
+			return false, fmt.Sprintf("container %s confidence %.1f%% below minimum %.1f%%",
+				c.ContainerName, c.Confidence, minConfidence)
+		}
+	}
+
+	return true, ""
 }
 
 // MetricsProvider is an interface for retrieving historical metrics
@@ -394,12 +465,14 @@ func (e *Engine) generateWorkloadRecommendationWithOOM(
 			namespace, workloadName, totalOOMCount, oomPriority)
 	}
 
+	now := time.Now()
 	return &WorkloadRecommendation{
 		Namespace:             namespace,
 		WorkloadKind:          "Deployment", // Default, could be enhanced to detect actual kind
 		WorkloadName:          workloadName,
 		Containers:            containerRecs,
-		GeneratedAt:           time.Now(),
+		GeneratedAt:           now,
+		ExpiresAt:             now.Add(e.RecommendationTTL),
 		TotalEstimatedSavings: totalSavings,
 		HasOOMHistory:         hasOOMHistory,
 		TotalOOMCount:         totalOOMCount,
