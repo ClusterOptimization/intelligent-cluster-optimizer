@@ -35,11 +35,23 @@ type OptimizerConfigSpec struct {
 	// +kubebuilder:validation:MinItems=1
 	TargetNamespaces []string `json:"targetNamespaces"`
 
+	// Profile selects a predefined optimization profile (production, staging, development, test)
+	// When set, this overrides the Strategy field with profile-specific settings
+	// +optional
+	// +kubebuilder:validation:Enum=production;staging;development;test;custom
+	Profile EnvironmentProfile `json:"profile,omitempty"`
+
+	// ProfileOverrides allows overriding specific profile settings
+	// Only used when Profile is set
+	// +optional
+	ProfileOverrides *ProfileOverrides `json:"profileOverrides,omitempty"`
+
 	// Strategy defines the optimization strategy (aggressive, balanced, conservative)
-	// +required
+	// Ignored if Profile is set (profile determines strategy)
+	// +optional
 	// +kubebuilder:validation:Enum=aggressive;balanced;conservative
 	// +kubebuilder:default=balanced
-	Strategy OptimizationStrategy `json:"strategy"`
+	Strategy OptimizationStrategy `json:"strategy,omitempty"`
 
 	// DryRun mode only logs recommendations without applying changes
 	// +optional
@@ -96,6 +108,50 @@ const (
 	// Conservative strategy prioritizes safety over optimization
 	StrategyConservative OptimizationStrategy = "conservative"
 )
+
+// EnvironmentProfile defines predefined optimization profiles for different environments
+// +kubebuilder:validation:Enum=production;staging;development;test;custom
+type EnvironmentProfile string
+
+const (
+	// ProfileProduction uses conservative settings optimized for production stability
+	ProfileProduction EnvironmentProfile = "production"
+	// ProfileStaging uses balanced settings for staging/pre-prod environments
+	ProfileStaging EnvironmentProfile = "staging"
+	// ProfileDevelopment uses aggressive settings for dev environments
+	ProfileDevelopment EnvironmentProfile = "development"
+	// ProfileTest uses very aggressive settings for test/ephemeral workloads
+	ProfileTest EnvironmentProfile = "test"
+	// ProfileCustom allows fully custom configuration
+	ProfileCustom EnvironmentProfile = "custom"
+)
+
+// ProfileOverrides allows overriding specific settings from a profile
+type ProfileOverrides struct {
+	// MinConfidence overrides the minimum confidence score required (0-100)
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=100
+	MinConfidence *float64 `json:"minConfidence,omitempty"`
+
+	// MaxChangePercent overrides the maximum allowed change percentage
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=100
+	MaxChangePercent *float64 `json:"maxChangePercent,omitempty"`
+
+	// RequireApproval overrides whether manual approval is required
+	// +optional
+	RequireApproval *bool `json:"requireApproval,omitempty"`
+
+	// ApplyDelay overrides how long to wait before applying (e.g., "1h", "24h")
+	// +optional
+	ApplyDelay string `json:"applyDelay,omitempty"`
+
+	// DryRun overrides whether to start in dry-run mode
+	// +optional
+	DryRun *bool `json:"dryRun,omitempty"`
+}
 
 // MaintenanceWindow defines a time window when updates are allowed
 type MaintenanceWindow struct {
