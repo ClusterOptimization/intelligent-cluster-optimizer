@@ -23,6 +23,12 @@ type Engine struct {
 
 	// Cost calculator for savings estimation
 	costCalculator *cost.Calculator
+
+	// Confidence calculator for scoring recommendations
+	confidenceCalculator *ConfidenceCalculator
+
+	// Expected interval between metric samples (for gap detection)
+	expectedSampleInterval time.Duration
 }
 
 // NewEngine creates a new recommendation engine with sensible defaults
@@ -34,6 +40,8 @@ func NewEngine() *Engine {
 		defaultMinSamples:       10,
 		defaultHistoryDuration:  24 * time.Hour,
 		costCalculator:          cost.NewCalculator(nil), // Use default pricing
+		confidenceCalculator:    NewConfidenceCalculator(),
+		expectedSampleInterval:  30 * time.Second, // Default: metrics collected every 30s
 	}
 }
 
@@ -59,7 +67,10 @@ type ContainerRecommendation struct {
 	SampleCount       int
 	CPUPercentile     int
 	MemoryPercentile  int
-	Confidence        float64 // 0.0 - 1.0 based on sample count
+	Confidence        float64 // 0-100 overall confidence score
+
+	// Detailed confidence scoring
+	ConfidenceDetails *ConfidenceScore
 
 	// Cost estimation
 	EstimatedSavings *cost.SavingsEstimate
@@ -464,14 +475,16 @@ func (e *Engine) generateContainerRecommendationWithOOM(
 	thresholds *optimizerv1alpha1.ResourceThresholds,
 	oomInfo *ContainerOOMDetails,
 ) *ContainerRecommendation {
-	// Extract CPU and memory values
+	// Extract CPU and memory values along with timestamps
 	cpuValues := make([]int64, len(samples))
 	memoryValues := make([]int64, len(samples))
+	timestamps := make([]time.Time, len(samples))
 
 	var currentCPU, currentMemory int64
 	for i, s := range samples {
 		cpuValues[i] = s.usageCPU
 		memoryValues[i] = s.usageMemory
+		timestamps[i] = s.timestamp
 		// Use the most recent request values as "current"
 		currentCPU = s.requestCPU
 		currentMemory = s.requestMemory
@@ -519,8 +532,16 @@ func (e *Engine) generateContainerRecommendationWithOOM(
 	recommendedCPU = e.applyThresholds(recommendedCPU, thresholds, "cpu")
 	recommendedMemory = e.applyThresholds(recommendedMemory, thresholds, "memory")
 
-	// Calculate confidence based on sample count
-	confidence := calculateConfidence(len(samples), minSamples)
+	// Calculate detailed confidence score using all metrics
+	// We use CPU values for confidence calculation as they typically have more variance
+	confidenceDetails := e.confidenceCalculator.CalculateFromSamples(
+		timestamps,
+		cpuValues,
+		e.expectedSampleInterval,
+	)
+
+	// Use the detailed score as the main confidence value
+	confidence := confidenceDetails.Score
 
 	// Calculate cost savings
 	savings := e.costCalculator.EstimateSavings(
@@ -540,20 +561,21 @@ func (e *Engine) generateContainerRecommendationWithOOM(
 		confidence, savings.TotalSavingsPerHour, oomLogSuffix)
 
 	return &ContainerRecommendation{
-		ContainerName:     containerName,
-		CurrentCPU:        currentCPU,
-		CurrentMemory:     currentMemory,
-		RecommendedCPU:    recommendedCPU,
-		RecommendedMemory: recommendedMemory,
-		SampleCount:       len(samples),
-		CPUPercentile:     cpuPercentile,
-		MemoryPercentile:  memoryPercentile,
-		Confidence:        confidence,
-		EstimatedSavings:  &savings,
-		HasOOMHistory:     hasOOMHistory,
-		OOMCount:          oomCount,
-		OOMBoostApplied:   oomBoostApplied,
-		OOMPriority:       oomPriority,
+		ContainerName:       containerName,
+		CurrentCPU:          currentCPU,
+		CurrentMemory:       currentMemory,
+		RecommendedCPU:      recommendedCPU,
+		RecommendedMemory:   recommendedMemory,
+		SampleCount:         len(samples),
+		CPUPercentile:       cpuPercentile,
+		MemoryPercentile:    memoryPercentile,
+		Confidence:          confidence,
+		ConfidenceDetails:   &confidenceDetails,
+		EstimatedSavings:    &savings,
+		HasOOMHistory:       hasOOMHistory,
+		OOMCount:            oomCount,
+		OOMBoostApplied:     oomBoostApplied,
+		OOMPriority:         oomPriority,
 	}
 }
 
