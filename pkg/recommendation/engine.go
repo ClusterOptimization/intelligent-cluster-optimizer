@@ -63,6 +63,12 @@ type ContainerRecommendation struct {
 
 	// Cost estimation
 	EstimatedSavings *cost.SavingsEstimate
+
+	// OOM information
+	HasOOMHistory    bool
+	OOMCount         int
+	OOMBoostApplied  float64 // Memory boost multiplier applied due to OOM history
+	OOMPriority      string  // Priority level based on OOM frequency
 }
 
 // WorkloadRecommendation represents recommendations for all containers in a workload
@@ -75,6 +81,11 @@ type WorkloadRecommendation struct {
 
 	// Cost estimation for entire workload
 	TotalEstimatedSavings *cost.SavingsEstimate
+
+	// OOM summary for workload
+	HasOOMHistory bool
+	TotalOOMCount int
+	OOMPriority   string // Overall priority based on OOM history
 }
 
 // MetricsProvider is an interface for retrieving historical metrics
@@ -83,9 +94,39 @@ type MetricsProvider interface {
 	GetMetricsByWorkload(namespace, workloadName string, since time.Duration) []models.PodMetric
 }
 
+// OOMInfoProvider is an interface for retrieving OOM information
+type OOMInfoProvider interface {
+	GetMemoryBoostFactor(namespace, workloadName, containerName string) float64
+	GetOOMHistory(namespace, workloadName string) *OOMHistoryInfo
+}
+
+// OOMHistoryInfo contains OOM history for a workload (simplified for recommendation use)
+type OOMHistoryInfo struct {
+	HasOOMHistory bool
+	TotalOOMCount int
+	Priority      string
+	ContainerOOMs map[string]ContainerOOMDetails
+}
+
+// ContainerOOMDetails contains OOM details for a container
+type ContainerOOMDetails struct {
+	OOMCount         int
+	RecommendedBoost float64
+	Priority         string
+}
+
 // GenerateRecommendations generates recommendations for workloads in the given namespaces
 func (e *Engine) GenerateRecommendations(
 	provider MetricsProvider,
+	config *optimizerv1alpha1.OptimizerConfig,
+) ([]WorkloadRecommendation, error) {
+	return e.GenerateRecommendationsWithOOM(provider, nil, config)
+}
+
+// GenerateRecommendationsWithOOM generates recommendations with OOM-aware memory adjustments
+func (e *Engine) GenerateRecommendationsWithOOM(
+	provider MetricsProvider,
+	oomProvider OOMInfoProvider,
 	config *optimizerv1alpha1.OptimizerConfig,
 ) ([]WorkloadRecommendation, error) {
 	var recommendations []WorkloadRecommendation
@@ -140,7 +181,13 @@ func (e *Engine) GenerateRecommendations(
 		workloadMetrics := e.groupByWorkload(metrics)
 
 		for workloadName, containerMetrics := range workloadMetrics {
-			rec := e.generateWorkloadRecommendation(
+			// Get OOM info for this workload if provider is available
+			var oomInfo *OOMHistoryInfo
+			if oomProvider != nil {
+				oomInfo = oomProvider.GetOOMHistory(namespace, workloadName)
+			}
+
+			rec := e.generateWorkloadRecommendationWithOOM(
 				namespace,
 				workloadName,
 				containerMetrics,
@@ -149,6 +196,7 @@ func (e *Engine) GenerateRecommendations(
 				safetyMargin,
 				minSamples,
 				config.Spec.ResourceThresholds,
+				oomInfo,
 			)
 			if rec != nil {
 				recommendations = append(recommendations, *rec)
@@ -156,7 +204,40 @@ func (e *Engine) GenerateRecommendations(
 		}
 	}
 
+	// Sort recommendations: OOM-affected workloads first, then by priority
+	sortRecommendationsByPriority(recommendations)
+
 	return recommendations, nil
+}
+
+// sortRecommendationsByPriority sorts recommendations with OOM-affected workloads first
+func sortRecommendationsByPriority(recs []WorkloadRecommendation) {
+	// Simple bubble sort for now - could use sort.Slice for larger lists
+	for i := 0; i < len(recs); i++ {
+		for j := i + 1; j < len(recs); j++ {
+			if shouldSwap(recs[i], recs[j]) {
+				recs[i], recs[j] = recs[j], recs[i]
+			}
+		}
+	}
+}
+
+// shouldSwap returns true if b should come before a (b has higher priority)
+func shouldSwap(a, b WorkloadRecommendation) bool {
+	// OOM workloads come first
+	if b.HasOOMHistory && !a.HasOOMHistory {
+		return true
+	}
+	if a.HasOOMHistory && !b.HasOOMHistory {
+		return false
+	}
+
+	// Both have OOM or neither has OOM - sort by OOM count
+	if a.HasOOMHistory && b.HasOOMHistory {
+		return b.TotalOOMCount > a.TotalOOMCount
+	}
+
+	return false
 }
 
 // applyStrategy adjusts percentile and safety margin based on optimization strategy
@@ -225,7 +306,26 @@ func (e *Engine) generateWorkloadRecommendation(
 	minSamples int,
 	thresholds *optimizerv1alpha1.ResourceThresholds,
 ) *WorkloadRecommendation {
+	return e.generateWorkloadRecommendationWithOOM(
+		namespace, workloadName, containerMetrics,
+		cpuPercentile, memoryPercentile, safetyMargin,
+		minSamples, thresholds, nil,
+	)
+}
+
+// generateWorkloadRecommendationWithOOM generates recommendations with OOM-aware memory adjustments
+func (e *Engine) generateWorkloadRecommendationWithOOM(
+	namespace, workloadName string,
+	containerMetrics map[string][]containerSample,
+	cpuPercentile, memoryPercentile int,
+	safetyMargin float64,
+	minSamples int,
+	thresholds *optimizerv1alpha1.ResourceThresholds,
+	oomInfo *OOMHistoryInfo,
+) *WorkloadRecommendation {
 	var containerRecs []ContainerRecommendation
+	var totalOOMCount int
+	hasOOMHistory := false
 
 	for containerName, samples := range containerMetrics {
 		if len(samples) < minSamples {
@@ -234,7 +334,17 @@ func (e *Engine) generateWorkloadRecommendation(
 			continue
 		}
 
-		rec := e.generateContainerRecommendation(
+		// Get OOM info for this specific container
+		var containerOOM *ContainerOOMDetails
+		if oomInfo != nil && oomInfo.ContainerOOMs != nil {
+			if oom, ok := oomInfo.ContainerOOMs[containerName]; ok {
+				containerOOM = &oom
+				hasOOMHistory = true
+				totalOOMCount += oom.OOMCount
+			}
+		}
+
+		rec := e.generateContainerRecommendationWithOOM(
 			containerName,
 			samples,
 			cpuPercentile,
@@ -242,6 +352,7 @@ func (e *Engine) generateWorkloadRecommendation(
 			safetyMargin,
 			minSamples,
 			thresholds,
+			containerOOM,
 		)
 		if rec != nil {
 			containerRecs = append(containerRecs, *rec)
@@ -255,6 +366,23 @@ func (e *Engine) generateWorkloadRecommendation(
 	// Calculate total workload savings
 	totalSavings := e.aggregateContainerSavings(containerRecs)
 
+	// Determine overall OOM priority
+	oomPriority := "None"
+	if oomInfo != nil {
+		oomPriority = oomInfo.Priority
+		if oomInfo.HasOOMHistory {
+			hasOOMHistory = true
+		}
+		if oomInfo.TotalOOMCount > totalOOMCount {
+			totalOOMCount = oomInfo.TotalOOMCount
+		}
+	}
+
+	if hasOOMHistory {
+		klog.V(3).Infof("Workload %s/%s has OOM history: count=%d, priority=%s",
+			namespace, workloadName, totalOOMCount, oomPriority)
+	}
+
 	return &WorkloadRecommendation{
 		Namespace:             namespace,
 		WorkloadKind:          "Deployment", // Default, could be enhanced to detect actual kind
@@ -262,6 +390,9 @@ func (e *Engine) generateWorkloadRecommendation(
 		Containers:            containerRecs,
 		GeneratedAt:           time.Now(),
 		TotalEstimatedSavings: totalSavings,
+		HasOOMHistory:         hasOOMHistory,
+		TotalOOMCount:         totalOOMCount,
+		OOMPriority:           oomPriority,
 	}
 }
 
@@ -317,6 +448,22 @@ func (e *Engine) generateContainerRecommendation(
 	minSamples int,
 	thresholds *optimizerv1alpha1.ResourceThresholds,
 ) *ContainerRecommendation {
+	return e.generateContainerRecommendationWithOOM(
+		containerName, samples, cpuPercentile, memoryPercentile,
+		safetyMargin, minSamples, thresholds, nil,
+	)
+}
+
+// generateContainerRecommendationWithOOM generates a recommendation with OOM-aware memory boost
+func (e *Engine) generateContainerRecommendationWithOOM(
+	containerName string,
+	samples []containerSample,
+	cpuPercentile, memoryPercentile int,
+	safetyMargin float64,
+	minSamples int,
+	thresholds *optimizerv1alpha1.ResourceThresholds,
+	oomInfo *ContainerOOMDetails,
+) *ContainerRecommendation {
 	// Extract CPU and memory values
 	cpuValues := make([]int64, len(samples))
 	memoryValues := make([]int64, len(samples))
@@ -338,6 +485,36 @@ func (e *Engine) generateContainerRecommendation(
 	recommendedCPU := int64(float64(cpuP) * safetyMargin)
 	recommendedMemory := int64(float64(memoryP) * safetyMargin)
 
+	// Apply OOM boost to memory if container has OOM history
+	var oomBoostApplied float64 = 1.0
+	hasOOMHistory := false
+	oomCount := 0
+	oomPriority := "None"
+
+	if oomInfo != nil {
+		hasOOMHistory = true
+		oomCount = oomInfo.OOMCount
+		oomPriority = oomInfo.Priority
+
+		// Apply OOM boost - this ensures we don't reduce memory below current if there's OOM history
+		if oomInfo.RecommendedBoost > 1.0 {
+			oomBoostApplied = oomInfo.RecommendedBoost
+			boostedMemory := int64(float64(recommendedMemory) * oomInfo.RecommendedBoost)
+
+			// If OOM occurred, never recommend less memory than current
+			if boostedMemory < currentMemory {
+				boostedMemory = currentMemory
+				klog.V(3).Infof("Container %s has OOM history - not reducing memory below current (%d bytes)",
+					containerName, currentMemory)
+			}
+
+			klog.V(3).Infof("Container %s: applying OOM boost %.2fx to memory: %d -> %d bytes (OOM count: %d, priority: %s)",
+				containerName, oomInfo.RecommendedBoost, recommendedMemory, boostedMemory, oomCount, oomPriority)
+
+			recommendedMemory = boostedMemory
+		}
+	}
+
 	// Apply thresholds
 	recommendedCPU = e.applyThresholds(recommendedCPU, thresholds, "cpu")
 	recommendedMemory = e.applyThresholds(recommendedMemory, thresholds, "memory")
@@ -351,11 +528,16 @@ func (e *Engine) generateContainerRecommendation(
 		currentMemory, recommendedMemory,
 	)
 
-	klog.V(4).Infof("Container %s: CPU P%d=%dm (recommended: %dm), Memory P%d=%dMi (recommended: %dMi), confidence=%.2f, savings=$%.4f/hour",
+	oomLogSuffix := ""
+	if hasOOMHistory {
+		oomLogSuffix = fmt.Sprintf(", OOM: count=%d boost=%.2fx priority=%s", oomCount, oomBoostApplied, oomPriority)
+	}
+
+	klog.V(4).Infof("Container %s: CPU P%d=%dm (recommended: %dm), Memory P%d=%dMi (recommended: %dMi), confidence=%.2f, savings=$%.4f/hour%s",
 		containerName,
 		cpuPercentile, cpuP, recommendedCPU,
 		memoryPercentile, memoryP/(1024*1024), recommendedMemory/(1024*1024),
-		confidence, savings.TotalSavingsPerHour)
+		confidence, savings.TotalSavingsPerHour, oomLogSuffix)
 
 	return &ContainerRecommendation{
 		ContainerName:     containerName,
@@ -368,6 +550,10 @@ func (e *Engine) generateContainerRecommendation(
 		MemoryPercentile:  memoryPercentile,
 		Confidence:        confidence,
 		EstimatedSavings:  &savings,
+		HasOOMHistory:     hasOOMHistory,
+		OOMCount:          oomCount,
+		OOMBoostApplied:   oomBoostApplied,
+		OOMPriority:       oomPriority,
 	}
 }
 
