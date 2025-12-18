@@ -106,6 +106,87 @@ func (s *InMemoryStorage) LoadFromFile(filename string) error {
 	return json.Unmarshal(data, &s.history) // json to map
 }
 
+// GetMetricsByNamespace returns all metrics for pods in a specific namespace
+// that are newer than the specified duration
+func (s *InMemoryStorage) GetMetricsByNamespace(namespace string, since time.Duration) []models.PodMetric {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	cutoffTime := time.Now().Add(-since)
+	var result []models.PodMetric
+
+	for _, metrics := range s.history {
+		for _, metric := range metrics {
+			if metric.Namespace == namespace && metric.Timestamp.After(cutoffTime) {
+				result = append(result, metric)
+			}
+		}
+	}
+
+	return result
+}
+
+// GetMetricsByWorkload returns metrics for pods matching a workload name prefix
+// in the specified namespace, newer than the specified duration
+func (s *InMemoryStorage) GetMetricsByWorkload(namespace, workloadName string, since time.Duration) []models.PodMetric {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	cutoffTime := time.Now().Add(-since)
+	var result []models.PodMetric
+
+	for podName, metrics := range s.history {
+		// Check if pod belongs to this workload (pod name starts with workload name)
+		if !hasPrefix(podName, workloadName) {
+			continue
+		}
+
+		for _, metric := range metrics {
+			if metric.Namespace == namespace && metric.Timestamp.After(cutoffTime) {
+				result = append(result, metric)
+			}
+		}
+	}
+
+	return result
+}
+
+// GetAllMetrics returns all stored metrics (for debugging/inspection)
+func (s *InMemoryStorage) GetAllMetrics() map[string][]models.PodMetric {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	// Return a copy to prevent mutation
+	result := make(map[string][]models.PodMetric, len(s.history))
+	for k, v := range s.history {
+		metricsCopy := make([]models.PodMetric, len(v))
+		copy(metricsCopy, v)
+		result[k] = metricsCopy
+	}
+
+	return result
+}
+
+// GetMetricCount returns the total number of metric entries stored
+func (s *InMemoryStorage) GetMetricCount() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	count := 0
+	for _, metrics := range s.history {
+		count += len(metrics)
+	}
+	return count
+}
+
+// hasPrefix checks if s starts with prefix (simple implementation to avoid strings import)
+func hasPrefix(s, prefix string) bool {
+	if len(prefix) > len(s) {
+		return false
+	}
+	return s[:len(prefix)] == prefix
+}
+
 // startGarbageCollector periodically cleans up old metrics from storage
 func (s *InMemoryStorage) StartGarbageCollector(interval time.Duration, maxAge time.Duration) {
 	ticker := time.NewTicker(interval)

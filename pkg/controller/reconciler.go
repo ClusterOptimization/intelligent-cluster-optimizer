@@ -2,13 +2,16 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	optimizerv1alpha1 "intelligent-cluster-optimizer/pkg/apis/optimizer/v1alpha1"
 	"intelligent-cluster-optimizer/pkg/applier"
 	"intelligent-cluster-optimizer/pkg/events"
+	"intelligent-cluster-optimizer/pkg/recommendation"
 	"intelligent-cluster-optimizer/pkg/safety"
 	"intelligent-cluster-optimizer/pkg/scheduler"
+	"intelligent-cluster-optimizer/pkg/storage"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -30,6 +33,8 @@ type Reconciler struct {
 	optimizerEvents        *events.OptimizerEventRecorder
 	maintenanceWindowCheck *scheduler.MaintenanceWindowChecker
 	circuitBreaker         *safety.CircuitBreaker
+	recommendationEngine   *recommendation.Engine
+	metricsStorage         *storage.InMemoryStorage
 }
 
 func NewReconciler(kubeClient kubernetes.Interface, eventRecorder record.EventRecorder) *Reconciler {
@@ -42,7 +47,19 @@ func NewReconciler(kubeClient kubernetes.Interface, eventRecorder record.EventRe
 		optimizerEvents:        events.NewOptimizerEventRecorder(eventRecorder),
 		maintenanceWindowCheck: scheduler.NewMaintenanceWindowChecker(),
 		circuitBreaker:         safety.NewCircuitBreaker(),
+		recommendationEngine:   recommendation.NewEngine(),
+		metricsStorage:         storage.NewStorage(),
 	}
+}
+
+// SetMetricsStorage allows injecting a shared metrics storage instance
+func (r *Reconciler) SetMetricsStorage(store *storage.InMemoryStorage) {
+	r.metricsStorage = store
+}
+
+// GetMetricsStorage returns the metrics storage for external population
+func (r *Reconciler) GetMetricsStorage() *storage.InMemoryStorage {
+	return r.metricsStorage
 }
 
 func (r *Reconciler) Reconcile(ctx context.Context, config *optimizerv1alpha1.OptimizerConfig) (*ReconcileResult, error) {
@@ -302,40 +319,132 @@ func (r *Reconciler) checkPDBViolations(ctx context.Context, config *optimizerv1
 func (r *Reconciler) processRecommendations(ctx context.Context, config *optimizerv1alpha1.OptimizerConfig, mode string) error {
 	klog.V(4).Infof("[%s] Processing recommendations for OptimizerConfig %s/%s", mode, config.Namespace, config.Name)
 
-	sampleRec := &applier.ResourceRecommendation{
-		Namespace:         config.Spec.TargetNamespaces[0],
-		WorkloadKind:      "Deployment",
-		WorkloadName:      "example-app",
-		ContainerName:     "app",
-		CurrentCPU:        "100m",
-		RecommendedCPU:    "200m",
-		CurrentMemory:     "128Mi",
-		RecommendedMemory: "256Mi",
-	}
-
-	applyResult, err := r.applier.Apply(ctx, sampleRec, config.Spec.DryRun)
+	// Generate recommendations using the engine with P95/P99 percentile calculation
+	recommendations, err := r.recommendationEngine.GenerateRecommendations(r.metricsStorage, config)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to generate recommendations: %w", err)
 	}
 
-	if config.Spec.DryRun {
-		klog.V(3).Infof("[DRY-RUN] Summary: %d changes would be applied to %s/%s",
-			len(applyResult.Changes), applyResult.WorkloadKind, applyResult.WorkloadName)
-		for _, change := range applyResult.Changes {
-			klog.V(3).Infof("[DRY-RUN]   - %s", change)
-		}
-		if len(applyResult.Changes) > 0 {
-			r.optimizerEvents.RecordNormalEvent(config, events.ReasonDryRunSimulated,
-				"Dry-run simulation completed, no changes applied")
-		}
-	} else if applyResult.Applied {
-		klog.Infof("[LIVE] Successfully applied %d changes to %s/%s",
-			len(applyResult.Changes), applyResult.WorkloadKind, applyResult.WorkloadName)
-		r.optimizerEvents.RecordOptimizationEvent(config, events.ReasonOptimizationApplied,
-			"Successfully applied resource optimization")
+	if len(recommendations) == 0 {
+		klog.V(3).Infof("[%s] No recommendations generated for %s/%s (insufficient metrics or no changes needed)",
+			mode, config.Namespace, config.Name)
+		return nil
 	}
+
+	// Calculate total estimated savings across all workloads
+	var totalSavingsPerMonth float64
+	for _, rec := range recommendations {
+		if rec.TotalEstimatedSavings != nil {
+			totalSavingsPerMonth += rec.TotalEstimatedSavings.SavingsPerMonth
+		}
+	}
+
+	klog.V(3).Infof("[%s] Generated %d workload recommendations (estimated savings: $%.2f/month)",
+		mode, len(recommendations), totalSavingsPerMonth)
+
+	// Process each workload recommendation
+	var appliedCount, skippedCount int
+	for _, workloadRec := range recommendations {
+		for _, containerRec := range workloadRec.Containers {
+			// Convert to applier format
+			rec := &applier.ResourceRecommendation{
+				Namespace:         workloadRec.Namespace,
+				WorkloadKind:      workloadRec.WorkloadKind,
+				WorkloadName:      workloadRec.WorkloadName,
+				ContainerName:     containerRec.ContainerName,
+				CurrentCPU:        formatCPU(containerRec.CurrentCPU),
+				RecommendedCPU:    formatCPU(containerRec.RecommendedCPU),
+				CurrentMemory:     formatMemory(containerRec.CurrentMemory),
+				RecommendedMemory: formatMemory(containerRec.RecommendedMemory),
+			}
+
+			// Skip if no changes needed
+			if !rec.HasChanges() {
+				klog.V(4).Infof("[%s] Skipping %s/%s/%s: no changes needed",
+					mode, rec.Namespace, rec.WorkloadName, rec.ContainerName)
+				skippedCount++
+				continue
+			}
+
+			// Log recommendation details with cost savings
+			savingsInfo := ""
+			if containerRec.EstimatedSavings != nil {
+				savingsInfo = fmt.Sprintf(", savings=$%.4f/hour ($%.2f/month)",
+					containerRec.EstimatedSavings.TotalSavingsPerHour,
+					containerRec.EstimatedSavings.SavingsPerMonth)
+			}
+			klog.V(3).Infof("[%s] Recommendation for %s/%s/%s: CPU %s->%s (P%d), Memory %s->%s (P%d), confidence=%.2f, samples=%d%s",
+				mode, rec.Namespace, rec.WorkloadName, rec.ContainerName,
+				rec.CurrentCPU, rec.RecommendedCPU, containerRec.CPUPercentile,
+				rec.CurrentMemory, rec.RecommendedMemory, containerRec.MemoryPercentile,
+				containerRec.Confidence, containerRec.SampleCount, savingsInfo)
+
+			applyResult, err := r.applier.Apply(ctx, rec, config.Spec.DryRun)
+			if err != nil {
+				klog.Warningf("[%s] Failed to apply recommendation for %s/%s/%s: %v",
+					mode, rec.Namespace, rec.WorkloadName, rec.ContainerName, err)
+				continue
+			}
+
+			if config.Spec.DryRun {
+				klog.V(3).Infof("[DRY-RUN] Summary: %d changes would be applied to %s/%s",
+					len(applyResult.Changes), applyResult.WorkloadKind, applyResult.WorkloadName)
+				for _, change := range applyResult.Changes {
+					klog.V(3).Infof("[DRY-RUN]   - %s", change)
+				}
+			} else if applyResult.Applied {
+				appliedCount++
+				klog.Infof("[LIVE] Successfully applied changes to %s/%s/%s",
+					rec.Namespace, rec.WorkloadName, rec.ContainerName)
+			}
+		}
+	}
+
+	// Record events with savings information
+	if config.Spec.DryRun {
+		if len(recommendations) > 0 {
+			r.optimizerEvents.RecordNormalEvent(config, events.ReasonDryRunSimulated,
+				fmt.Sprintf("Dry-run: %d recommendations generated, %d skipped (estimated savings: $%.2f/month)",
+					len(recommendations), skippedCount, totalSavingsPerMonth))
+		}
+	} else if appliedCount > 0 {
+		r.optimizerEvents.RecordOptimizationEvent(config, events.ReasonOptimizationApplied,
+			fmt.Sprintf("Applied %d resource optimizations (estimated savings: $%.2f/month)",
+				appliedCount, totalSavingsPerMonth))
+		config.Status.TotalUpdatesApplied += int64(appliedCount)
+	}
+
+	config.Status.TotalRecommendations += int64(len(recommendations))
 
 	return nil
+}
+
+// formatCPU converts millicores to Kubernetes CPU format (e.g., 100 -> "100m", 1000 -> "1")
+func formatCPU(millicores int64) string {
+	if millicores >= 1000 && millicores%1000 == 0 {
+		return fmt.Sprintf("%d", millicores/1000)
+	}
+	return fmt.Sprintf("%dm", millicores)
+}
+
+// formatMemory converts bytes to Kubernetes memory format (e.g., "128Mi", "1Gi")
+func formatMemory(bytes int64) string {
+	const (
+		Ki = 1024
+		Mi = Ki * 1024
+		Gi = Mi * 1024
+	)
+
+	if bytes >= Gi && bytes%Gi == 0 {
+		return fmt.Sprintf("%dGi", bytes/Gi)
+	}
+	if bytes >= Mi {
+		return fmt.Sprintf("%dMi", bytes/Mi)
+	}
+	if bytes >= Ki {
+		return fmt.Sprintf("%dKi", bytes/Ki)
+	}
+	return fmt.Sprintf("%d", bytes)
 }
 
 func resourceTypeToKind(resourceType optimizerv1alpha1.TargetResourceType) string {
