@@ -1,3 +1,50 @@
-# possible binary files
-bin/collector
+# Binaries and build artifacts
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
 cmd/collector/collector
+cmd/controller/controller
+cmd/optctl/optctl
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+coverage.txt
+coverage.html
+
+# Dependency directories
+vendor/
+
+# Go workspace file
+go.work
+
+# IDE-specific files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Kubernetes generated files
+*.kubeconfig
+
+# Log files
+*.log
+
+# Environment files (may contain secrets)
+.env
+.env.local

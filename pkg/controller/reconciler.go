@@ -135,6 +135,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, config *optimizerv1alpha1.Op
 		klog.Infof("OptimizerConfig %s/%s running in LIVE mode - changes will be applied", config.Namespace, config.Name)
 	}
 
+	// Process recommendations with per-workload safety checks
 	if err := r.processRecommendations(ctx, config, mode); err != nil {
 		klog.Warningf("Failed to process recommendations: %v", err)
 		if config.Spec.CircuitBreaker != nil && config.Spec.CircuitBreaker.Enabled {
@@ -144,53 +145,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, config *optimizerv1alpha1.Op
 					stateName, config.Namespace, config.Name, err)
 				r.optimizerEvents.RecordWarningEvent(config, "CircuitBreakerStateChanged",
 					"Circuit breaker state: "+stateName)
-			}
-		}
-	}
-
-	if config.Spec.HPAAwareness != nil && config.Spec.HPAAwareness.Enabled {
-		hasConflicts, err := r.checkHPAConflicts(ctx, config)
-		if err != nil {
-			klog.Warningf("Failed to check HPA conflicts: %v", err)
-		} else if hasConflicts {
-			result.Updated = true
-			policy := config.Spec.HPAAwareness.ConflictPolicy
-			if policy == "" || policy == optimizerv1alpha1.HPAConflictPolicySkip {
-				klog.V(3).Infof("HPA conflicts detected for %s/%s, skipping optimization", config.Namespace, config.Name)
-				r.optimizerEvents.RecordWarningEvent(config, events.ReasonHPAConflictDetected,
-					"HPA conflict detected, skipping optimization")
-				return result, nil
-			} else if policy == optimizerv1alpha1.HPAConflictPolicyWarn {
-				klog.Warningf("HPA conflicts detected for %s/%s, proceeding with caution", config.Namespace, config.Name)
-				r.optimizerEvents.RecordWarningEvent(config, events.ReasonHPAConflictDetected,
-					"HPA conflict detected, proceeding with caution")
-			}
-		} else {
-			if err := r.updateCondition(config, optimizerv1alpha1.ConditionTypeHPAConflict, optimizerv1alpha1.ConditionFalse, "NoConflict", "No HPA conflicts detected"); err != nil {
-				return result, err
-			}
-		}
-	}
-
-	if config.Spec.PDBAwareness != nil && config.Spec.PDBAwareness.Enabled {
-		hasViolations, err := r.checkPDBViolations(ctx, config)
-		if err != nil {
-			klog.Warningf("Failed to check PDB violations: %v", err)
-		} else if hasViolations {
-			result.Updated = true
-			if config.Spec.PDBAwareness.RespectMinAvailable {
-				klog.V(3).Infof("PDB violations detected for %s/%s, skipping optimization", config.Namespace, config.Name)
-				r.optimizerEvents.RecordWarningEvent(config, events.ReasonPDBViolation,
-					"PodDisruptionBudget violation detected, skipping optimization")
-				return result, nil
-			} else {
-				klog.Warningf("PDB violations detected for %s/%s, proceeding anyway", config.Namespace, config.Name)
-				r.optimizerEvents.RecordWarningEvent(config, events.ReasonPDBViolation,
-					"PodDisruptionBudget violation detected, proceeding anyway")
-			}
-		} else {
-			if err := r.updateCondition(config, optimizerv1alpha1.ConditionTypePDBViolation, optimizerv1alpha1.ConditionFalse, "NoViolation", "No PDB violations detected"); err != nil {
-				return result, err
 			}
 		}
 	}
@@ -345,6 +299,57 @@ func (r *Reconciler) processRecommendations(ctx context.Context, config *optimiz
 	// Process each workload recommendation
 	var appliedCount, skippedCount int
 	for _, workloadRec := range recommendations {
+		// SAFETY CHECK: Check HPA conflicts before processing this workload
+		if config.Spec.HPAAwareness != nil && config.Spec.HPAAwareness.Enabled {
+			hpaResult, err := r.hpaChecker.CheckHPAConflict(ctx, workloadRec.Namespace, workloadRec.WorkloadKind, workloadRec.WorkloadName)
+			if err != nil {
+				klog.Warningf("Failed to check HPA conflict for %s/%s/%s: %v", workloadRec.Namespace, workloadRec.WorkloadKind, workloadRec.WorkloadName, err)
+			} else if hpaResult.HasConflict {
+				policy := config.Spec.HPAAwareness.ConflictPolicy
+				if policy == "" || policy == optimizerv1alpha1.HPAConflictPolicySkip {
+					klog.V(3).Infof("[%s] Skipping %s/%s/%s: HPA conflict detected - %s",
+						mode, workloadRec.Namespace, workloadRec.WorkloadKind, workloadRec.WorkloadName, hpaResult.Message)
+					r.optimizerEvents.RecordWarningEvent(config, events.ReasonHPAConflictDetected,
+						fmt.Sprintf("HPA conflict for %s/%s: %s", workloadRec.WorkloadKind, workloadRec.WorkloadName, hpaResult.Message))
+					if err := r.updateCondition(config, optimizerv1alpha1.ConditionTypeHPAConflict, optimizerv1alpha1.ConditionTrue, "ConflictDetected", hpaResult.Message); err != nil {
+						klog.Warningf("Failed to update condition: %v", err)
+					}
+					skippedCount++
+					continue
+				} else if policy == optimizerv1alpha1.HPAConflictPolicyWarn {
+					klog.Warningf("[%s] HPA conflict for %s/%s/%s, proceeding with caution: %s",
+						mode, workloadRec.Namespace, workloadRec.WorkloadKind, workloadRec.WorkloadName, hpaResult.Message)
+					r.optimizerEvents.RecordWarningEvent(config, events.ReasonHPAConflictDetected,
+						fmt.Sprintf("HPA conflict for %s/%s (proceeding): %s", workloadRec.WorkloadKind, workloadRec.WorkloadName, hpaResult.Message))
+				}
+			}
+		}
+
+		// SAFETY CHECK: Check PDB constraints before processing this workload
+		if config.Spec.PDBAwareness != nil && config.Spec.PDBAwareness.Enabled && !config.Spec.DryRun {
+			pdbResult, err := r.pdbChecker.CheckPDBSafety(ctx, workloadRec.Namespace, workloadRec.WorkloadKind, workloadRec.WorkloadName, 1)
+			if err != nil {
+				klog.Warningf("Failed to check PDB for %s/%s/%s: %v", workloadRec.Namespace, workloadRec.WorkloadKind, workloadRec.WorkloadName, err)
+			} else if pdbResult.HasPDB && !pdbResult.IsSafe {
+				if config.Spec.PDBAwareness.RespectMinAvailable {
+					klog.V(3).Infof("[%s] Skipping %s/%s/%s: PDB violation detected - %s",
+						mode, workloadRec.Namespace, workloadRec.WorkloadKind, workloadRec.WorkloadName, pdbResult.Message)
+					r.optimizerEvents.RecordWarningEvent(config, events.ReasonPDBViolation,
+						fmt.Sprintf("PDB violation for %s/%s: %s", workloadRec.WorkloadKind, workloadRec.WorkloadName, pdbResult.Message))
+					if err := r.updateCondition(config, optimizerv1alpha1.ConditionTypePDBViolation, optimizerv1alpha1.ConditionTrue, "ViolationDetected", pdbResult.Message); err != nil {
+						klog.Warningf("Failed to update condition: %v", err)
+					}
+					skippedCount++
+					continue
+				} else {
+					klog.Warningf("[%s] PDB violation for %s/%s/%s, proceeding anyway: %s",
+						mode, workloadRec.Namespace, workloadRec.WorkloadKind, workloadRec.WorkloadName, pdbResult.Message)
+					r.optimizerEvents.RecordWarningEvent(config, events.ReasonPDBViolation,
+						fmt.Sprintf("PDB violation for %s/%s (proceeding): %s", workloadRec.WorkloadKind, workloadRec.WorkloadName, pdbResult.Message))
+				}
+			}
+		}
+
 		for _, containerRec := range workloadRec.Containers {
 			// Convert to applier format
 			rec := &applier.ResourceRecommendation{

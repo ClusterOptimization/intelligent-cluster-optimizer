@@ -1,6 +1,7 @@
 package safety
 
 import (
+	"sync"
 	"time"
 
 	optimizerv1alpha1 "intelligent-cluster-optimizer/pkg/apis/optimizer/v1alpha1"
@@ -9,7 +10,10 @@ import (
 	"k8s.io/klog/v2"
 )
 
-type CircuitBreaker struct{}
+type CircuitBreaker struct {
+	// mu protects concurrent access to circuit breaker state in config.Status
+	mu sync.Mutex
+}
 
 func NewCircuitBreaker() *CircuitBreaker {
 	return &CircuitBreaker{}
@@ -19,6 +23,9 @@ func (cb *CircuitBreaker) ShouldAllow(config *optimizerv1alpha1.OptimizerConfig)
 	if config.Spec.CircuitBreaker == nil || !config.Spec.CircuitBreaker.Enabled {
 		return true
 	}
+
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
 
 	if config.Status.CircuitState == optimizerv1alpha1.CircuitStateOpen {
 		timeout, err := time.ParseDuration(config.Spec.CircuitBreaker.Timeout)
@@ -46,6 +53,9 @@ func (cb *CircuitBreaker) RecordSuccess(config *optimizerv1alpha1.OptimizerConfi
 	if config.Spec.CircuitBreaker == nil || !config.Spec.CircuitBreaker.Enabled {
 		return false
 	}
+
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
 
 	config.Status.ConsecutiveErrors = 0
 	config.Status.ConsecutiveSuccesses++
@@ -78,6 +88,9 @@ func (cb *CircuitBreaker) RecordFailure(config *optimizerv1alpha1.OptimizerConfi
 	if config.Spec.CircuitBreaker == nil || !config.Spec.CircuitBreaker.Enabled {
 		return false
 	}
+
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
 
 	config.Status.ConsecutiveSuccesses = 0
 	config.Status.ConsecutiveErrors++
