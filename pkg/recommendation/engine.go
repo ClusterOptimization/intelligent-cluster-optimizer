@@ -2,6 +2,7 @@ package recommendation
 
 import (
 	"fmt"
+	"math"
 	"sort"
 	"time"
 
@@ -89,6 +90,41 @@ type ContainerRecommendation struct {
 	OOMCount         int
 	OOMBoostApplied  float64 // Memory boost multiplier applied due to OOM history
 	OOMPriority      string  // Priority level based on OOM frequency
+}
+
+// CalculateCPUChangePercent returns the percentage change in CPU from current to recommended.
+// Returns positive values for increases, negative for decreases.
+func (c *ContainerRecommendation) CalculateCPUChangePercent() float64 {
+	return calculateChangePercent(c.CurrentCPU, c.RecommendedCPU)
+}
+
+// CalculateMemoryChangePercent returns the percentage change in memory from current to recommended.
+// Returns positive values for increases, negative for decreases.
+func (c *ContainerRecommendation) CalculateMemoryChangePercent() float64 {
+	return calculateChangePercent(c.CurrentMemory, c.RecommendedMemory)
+}
+
+// MaxChangePercent returns the maximum absolute change percentage across CPU and memory.
+// This is useful for checking against MaxChangePercent limits.
+func (c *ContainerRecommendation) MaxChangePercent() float64 {
+	cpuChange := math.Abs(c.CalculateCPUChangePercent())
+	memChange := math.Abs(c.CalculateMemoryChangePercent())
+	if cpuChange > memChange {
+		return cpuChange
+	}
+	return memChange
+}
+
+// calculateChangePercent calculates the percentage change from current to recommended value.
+// Returns 0 if current is 0 to avoid division by zero.
+func calculateChangePercent(current, recommended int64) float64 {
+	if current == 0 {
+		if recommended == 0 {
+			return 0
+		}
+		return 100 // 100% increase from 0
+	}
+	return (float64(recommended-current) / float64(current)) * 100
 }
 
 // WorkloadRecommendation represents recommendations for all containers in a workload

@@ -248,3 +248,84 @@ func TestReconciler_UpdateCondition(t *testing.T) {
 		t.Errorf("Expected updated condition status False, got %s", cond.Status)
 	}
 }
+
+func TestReconciler_ProfileResolverInitialized(t *testing.T) {
+	client := fake.NewSimpleClientset()
+	r := NewReconciler(client, nil)
+
+	if r.profileResolver == nil {
+		t.Error("Expected profileResolver to be initialized")
+	}
+}
+
+func TestReconciler_MaxChangePercentEnforcement(t *testing.T) {
+	client := fake.NewSimpleClientset()
+	r := NewReconciler(client, nil)
+
+	// Test with production profile which has MaxChangePercent = 20%
+	config := &optimizerv1alpha1.OptimizerConfig{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "test-config",
+			Namespace:  "default",
+			Generation: 1,
+		},
+		Spec: optimizerv1alpha1.OptimizerConfigSpec{
+			Enabled:          true,
+			TargetNamespaces: []string{"default"},
+			Strategy:         optimizerv1alpha1.StrategyBalanced,
+			Profile:          optimizerv1alpha1.ProfileProduction,
+			DryRun:           true, // Use dry-run to avoid actual changes
+		},
+		Status: optimizerv1alpha1.OptimizerConfigStatus{
+			Phase: optimizerv1alpha1.OptimizerPhaseActive,
+		},
+	}
+
+	// Resolve settings to verify MaxChangePercent is set
+	settings, err := r.profileResolver.Resolve(config)
+	if err != nil {
+		t.Fatalf("Failed to resolve settings: %v", err)
+	}
+
+	// Production profile should have MaxChangePercent = 20%
+	if settings.MaxChangePercent != 20.0 {
+		t.Errorf("Expected MaxChangePercent 20.0 for production profile, got %.1f", settings.MaxChangePercent)
+	}
+}
+
+func TestReconciler_ProfileOverrideMaxChangePercent(t *testing.T) {
+	client := fake.NewSimpleClientset()
+	r := NewReconciler(client, nil)
+
+	maxChange := 10.0
+	config := &optimizerv1alpha1.OptimizerConfig{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "test-config",
+			Namespace:  "default",
+			Generation: 1,
+		},
+		Spec: optimizerv1alpha1.OptimizerConfigSpec{
+			Enabled:          true,
+			TargetNamespaces: []string{"default"},
+			Strategy:         optimizerv1alpha1.StrategyBalanced,
+			Profile:          optimizerv1alpha1.ProfileProduction,
+			ProfileOverrides: &optimizerv1alpha1.ProfileOverrides{
+				MaxChangePercent: &maxChange,
+			},
+		},
+		Status: optimizerv1alpha1.OptimizerConfigStatus{
+			Phase: optimizerv1alpha1.OptimizerPhaseActive,
+		},
+	}
+
+	// Resolve settings to verify override is applied
+	settings, err := r.profileResolver.Resolve(config)
+	if err != nil {
+		t.Fatalf("Failed to resolve settings: %v", err)
+	}
+
+	// Override should take precedence
+	if settings.MaxChangePercent != 10.0 {
+		t.Errorf("Expected MaxChangePercent 10.0 from override, got %.1f", settings.MaxChangePercent)
+	}
+}

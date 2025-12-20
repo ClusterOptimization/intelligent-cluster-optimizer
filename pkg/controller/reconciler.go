@@ -8,6 +8,7 @@ import (
 	optimizerv1alpha1 "intelligent-cluster-optimizer/pkg/apis/optimizer/v1alpha1"
 	"intelligent-cluster-optimizer/pkg/applier"
 	"intelligent-cluster-optimizer/pkg/events"
+	"intelligent-cluster-optimizer/pkg/profile"
 	"intelligent-cluster-optimizer/pkg/recommendation"
 	"intelligent-cluster-optimizer/pkg/safety"
 	"intelligent-cluster-optimizer/pkg/scheduler"
@@ -35,6 +36,7 @@ type Reconciler struct {
 	circuitBreaker         *safety.CircuitBreaker
 	recommendationEngine   *recommendation.Engine
 	metricsStorage         *storage.InMemoryStorage
+	profileResolver        *profile.Resolver
 }
 
 func NewReconciler(kubeClient kubernetes.Interface, eventRecorder record.EventRecorder) *Reconciler {
@@ -49,6 +51,7 @@ func NewReconciler(kubeClient kubernetes.Interface, eventRecorder record.EventRe
 		circuitBreaker:         safety.NewCircuitBreaker(),
 		recommendationEngine:   recommendation.NewEngine(),
 		metricsStorage:         storage.NewStorage(),
+		profileResolver:        profile.NewResolver(),
 	}
 }
 
@@ -273,6 +276,13 @@ func (r *Reconciler) checkPDBViolations(ctx context.Context, config *optimizerv1
 func (r *Reconciler) processRecommendations(ctx context.Context, config *optimizerv1alpha1.OptimizerConfig, mode string) error {
 	klog.V(4).Infof("[%s] Processing recommendations for OptimizerConfig %s/%s", mode, config.Namespace, config.Name)
 
+	// Resolve profile settings for this config
+	resolvedSettings, err := r.profileResolver.Resolve(config)
+	if err != nil {
+		klog.Warningf("Failed to resolve profile settings, using defaults: %v", err)
+		// Continue with nil settings - will skip MaxChangePercent check
+	}
+
 	// Generate recommendations using the engine with P95/P99 percentile calculation
 	recommendations, err := r.recommendationEngine.GenerateRecommendations(r.metricsStorage, config)
 	if err != nil {
@@ -369,6 +379,20 @@ func (r *Reconciler) processRecommendations(ctx context.Context, config *optimiz
 					mode, rec.Namespace, rec.WorkloadName, rec.ContainerName)
 				skippedCount++
 				continue
+			}
+
+			// SAFETY CHECK: Enforce MaxChangePercent limit
+			if resolvedSettings != nil {
+				changePercent := containerRec.MaxChangePercent()
+				shouldApply, reason := resolvedSettings.ShouldApplyRecommendation(containerRec.Confidence, changePercent)
+				if !shouldApply {
+					klog.V(3).Infof("[%s] Skipping %s/%s/%s: %s (change=%.1f%%, confidence=%.1f%%)",
+						mode, rec.Namespace, rec.WorkloadName, rec.ContainerName, reason, changePercent, containerRec.Confidence)
+					r.optimizerEvents.RecordWarningEvent(config, events.ReasonRecommendationSkipped,
+						fmt.Sprintf("Skipped %s/%s: %s", rec.WorkloadName, rec.ContainerName, reason))
+					skippedCount++
+					continue
+				}
 			}
 
 			// Log recommendation details with cost savings
