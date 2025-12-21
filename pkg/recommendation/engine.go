@@ -136,6 +136,10 @@ type WorkloadRecommendation struct {
 	GeneratedAt  time.Time
 	ExpiresAt    time.Time // When this recommendation becomes stale
 
+	// Current totals (for prediction comparison)
+	CurrentTotalCPU    int64 // Total current CPU in millicores
+	CurrentTotalMemory int64 // Total current memory in bytes
+
 	// Cost estimation for entire workload
 	TotalEstimatedSavings *cost.SavingsEstimate
 
@@ -501,6 +505,13 @@ func (e *Engine) generateWorkloadRecommendationWithOOM(
 			namespace, workloadName, totalOOMCount, oomPriority)
 	}
 
+	// Calculate current totals for prediction comparison
+	var currentTotalCPU, currentTotalMemory int64
+	for _, c := range containerRecs {
+		currentTotalCPU += c.CurrentCPU
+		currentTotalMemory += c.CurrentMemory
+	}
+
 	now := time.Now()
 	return &WorkloadRecommendation{
 		Namespace:             namespace,
@@ -509,6 +520,8 @@ func (e *Engine) generateWorkloadRecommendationWithOOM(
 		Containers:            containerRecs,
 		GeneratedAt:           now,
 		ExpiresAt:             now.Add(e.RecommendationTTL),
+		CurrentTotalCPU:       currentTotalCPU,
+		CurrentTotalMemory:    currentTotalMemory,
 		TotalEstimatedSavings: totalSavings,
 		HasOOMHistory:         hasOOMHistory,
 		TotalOOMCount:         totalOOMCount,

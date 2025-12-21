@@ -19,6 +19,7 @@ const (
 	ReasonScalingFailed            = "ScalingFailed"
 	ReasonRecommendationSkipped    = "RecommendationSkipped"
 	ReasonAnomalyDetected          = "AnomalyDetected"
+	ReasonPeakLoadPredicted        = "PeakLoadPredicted"
 )
 
 type OptimizerEventRecorder struct {

@@ -32,6 +32,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Z-Score detector
   - IQR (Interquartile Range) detector
   - Moving Average deviation detector
+- Time series prediction using Holt-Winters (Triple Exponential Smoothing):
+  - Level, trend, and seasonality component modeling
+  - Seasonal decomposition for pattern extraction
+  - Peak load prediction with proactive warnings
+  - Scaling recommendations based on predicted usage
 
 #### Configuration
 - Environment-based optimization profiles (production, staging, development, test)
@@ -80,4 +85,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 **Enterprise Features**: Environment profiles, maintenance windows, cost estimation, and comprehensive audit trails make this suitable for enterprise deployments.
 
-**Classical Algorithms**: Uses proven statistical methods (no ML dependencies) including linear regression, control charts, and time series analysis.
+**Classical Algorithms**: Uses proven statistical methods (no ML dependencies) including linear regression, control charts, time series analysis, and Holt-Winters exponential smoothing for predictive scaling.

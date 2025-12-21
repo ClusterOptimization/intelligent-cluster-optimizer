@@ -9,6 +9,7 @@ import (
 	"intelligent-cluster-optimizer/pkg/anomaly"
 	"intelligent-cluster-optimizer/pkg/applier"
 	"intelligent-cluster-optimizer/pkg/events"
+	"intelligent-cluster-optimizer/pkg/prediction"
 	"intelligent-cluster-optimizer/pkg/profile"
 	"intelligent-cluster-optimizer/pkg/recommendation"
 	"intelligent-cluster-optimizer/pkg/safety"
@@ -39,6 +40,7 @@ type Reconciler struct {
 	metricsStorage         *storage.InMemoryStorage
 	profileResolver        *profile.Resolver
 	anomalyChecker         *anomaly.WorkloadChecker
+	workloadPredictor      *prediction.WorkloadPredictor
 }
 
 func NewReconciler(kubeClient kubernetes.Interface, eventRecorder record.EventRecorder) *Reconciler {
@@ -55,6 +57,7 @@ func NewReconciler(kubeClient kubernetes.Interface, eventRecorder record.EventRe
 		metricsStorage:         storage.NewStorage(),
 		profileResolver:        profile.NewResolver(),
 		anomalyChecker:         anomaly.NewWorkloadChecker(),
+		workloadPredictor:      prediction.NewWorkloadPredictor(),
 	}
 }
 
@@ -377,6 +380,33 @@ func (r *Reconciler) processRecommendations(ctx context.Context, config *optimiz
 			} else if anomalyResult.HasAnyAnomaly {
 				klog.V(4).Infof("[%s] Workload %s/%s has %d anomalies (severity: %s) - proceeding with caution",
 					mode, workloadRec.Namespace, workloadRec.WorkloadName, anomalyResult.AnomalyCount, anomalyResult.HighestSeverity)
+			}
+		}
+
+		// PREDICTION: Generate future resource usage predictions
+		if len(workloadMetrics) >= r.workloadPredictor.MinDataPoints {
+			pred, err := r.workloadPredictor.PredictWorkload(workloadRec.Namespace, workloadRec.WorkloadName, workloadMetrics)
+			if err == nil && pred != nil {
+				// Check if we're approaching a predicted peak
+				cpuDuration, memDuration := pred.TimeUntilPeak()
+				peakWarningThreshold := 2 * time.Hour
+
+				if cpuDuration > 0 && cpuDuration < peakWarningThreshold {
+					klog.V(3).Infof("[%s] %s/%s: CPU peak predicted in %v (peak=%.0f, trend=%s)",
+						mode, workloadRec.Namespace, workloadRec.WorkloadName, cpuDuration.Round(time.Minute), pred.PeakCPU, pred.CPUTrend)
+					r.optimizerEvents.RecordNormalEvent(config, events.ReasonPeakLoadPredicted,
+						fmt.Sprintf("CPU peak in %v for %s/%s (predicted: %.0fm)", cpuDuration.Round(time.Minute),
+							workloadRec.Namespace, workloadRec.WorkloadName, pred.PeakCPU))
+				}
+				if memDuration > 0 && memDuration < peakWarningThreshold {
+					klog.V(3).Infof("[%s] %s/%s: Memory peak predicted in %v (peak=%.0f, trend=%s)",
+						mode, workloadRec.Namespace, workloadRec.WorkloadName, memDuration.Round(time.Minute), pred.PeakMemory, pred.MemoryTrend)
+				}
+
+				// Log scaling recommendations based on predictions
+				scalingRec := pred.GetScalingRecommendation(workloadRec.CurrentTotalCPU, workloadRec.CurrentTotalMemory)
+				klog.V(4).Infof("[%s] Prediction for %s/%s: %s (confidence=%.1f%%)",
+					mode, workloadRec.Namespace, workloadRec.WorkloadName, scalingRec, pred.Confidence)
 			}
 		}
 
