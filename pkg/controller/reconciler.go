@@ -6,6 +6,7 @@ import (
 	"time"
 
 	optimizerv1alpha1 "intelligent-cluster-optimizer/pkg/apis/optimizer/v1alpha1"
+	"intelligent-cluster-optimizer/pkg/anomaly"
 	"intelligent-cluster-optimizer/pkg/applier"
 	"intelligent-cluster-optimizer/pkg/events"
 	"intelligent-cluster-optimizer/pkg/profile"
@@ -37,6 +38,7 @@ type Reconciler struct {
 	recommendationEngine   *recommendation.Engine
 	metricsStorage         *storage.InMemoryStorage
 	profileResolver        *profile.Resolver
+	anomalyChecker         *anomaly.WorkloadChecker
 }
 
 func NewReconciler(kubeClient kubernetes.Interface, eventRecorder record.EventRecorder) *Reconciler {
@@ -52,6 +54,7 @@ func NewReconciler(kubeClient kubernetes.Interface, eventRecorder record.EventRe
 		recommendationEngine:   recommendation.NewEngine(),
 		metricsStorage:         storage.NewStorage(),
 		profileResolver:        profile.NewResolver(),
+		anomalyChecker:         anomaly.NewWorkloadChecker(),
 	}
 }
 
@@ -357,6 +360,23 @@ func (r *Reconciler) processRecommendations(ctx context.Context, config *optimiz
 					r.optimizerEvents.RecordWarningEvent(config, events.ReasonPDBViolation,
 						fmt.Sprintf("PDB violation for %s/%s (proceeding): %s", workloadRec.WorkloadKind, workloadRec.WorkloadName, pdbResult.Message))
 				}
+			}
+		}
+
+		// SAFETY CHECK: Check for anomalies in workload metrics before scaling
+		workloadMetrics := r.metricsStorage.GetMetricsByWorkload(workloadRec.Namespace, workloadRec.WorkloadName, 24*time.Hour)
+		if len(workloadMetrics) > 0 {
+			anomalyResult := r.anomalyChecker.CheckWorkload(workloadRec.Namespace, workloadRec.WorkloadName, workloadMetrics)
+			if anomalyResult.ShouldBlockScaling {
+				klog.V(3).Infof("[%s] Skipping %s/%s: anomaly detected - %s (action: %s)",
+					mode, workloadRec.Namespace, workloadRec.WorkloadName, anomalyResult.BlockReason, anomalyResult.RecommendedAction)
+				r.optimizerEvents.RecordWarningEvent(config, events.ReasonAnomalyDetected,
+					fmt.Sprintf("Anomaly in %s/%s: %s", workloadRec.Namespace, workloadRec.WorkloadName, anomalyResult.BlockReason))
+				skippedCount++
+				continue
+			} else if anomalyResult.HasAnyAnomaly {
+				klog.V(4).Infof("[%s] Workload %s/%s has %d anomalies (severity: %s) - proceeding with caution",
+					mode, workloadRec.Namespace, workloadRec.WorkloadName, anomalyResult.AnomalyCount, anomalyResult.HighestSeverity)
 			}
 		}
 
