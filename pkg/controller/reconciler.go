@@ -9,6 +9,7 @@ import (
 	"intelligent-cluster-optimizer/pkg/anomaly"
 	"intelligent-cluster-optimizer/pkg/applier"
 	"intelligent-cluster-optimizer/pkg/events"
+	"intelligent-cluster-optimizer/pkg/pareto"
 	"intelligent-cluster-optimizer/pkg/prediction"
 	"intelligent-cluster-optimizer/pkg/profile"
 	"intelligent-cluster-optimizer/pkg/recommendation"
@@ -41,6 +42,7 @@ type Reconciler struct {
 	profileResolver        *profile.Resolver
 	anomalyChecker         *anomaly.WorkloadChecker
 	workloadPredictor      *prediction.WorkloadPredictor
+	paretoHelper           *pareto.RecommendationHelper
 }
 
 func NewReconciler(kubeClient kubernetes.Interface, eventRecorder record.EventRecorder) *Reconciler {
@@ -58,6 +60,7 @@ func NewReconciler(kubeClient kubernetes.Interface, eventRecorder record.EventRe
 		profileResolver:        profile.NewResolver(),
 		anomalyChecker:         anomaly.NewWorkloadChecker(),
 		workloadPredictor:      prediction.NewWorkloadPredictor(),
+		paretoHelper:           pareto.NewRecommendationHelper(),
 	}
 }
 
@@ -410,6 +413,42 @@ func (r *Reconciler) processRecommendations(ctx context.Context, config *optimiz
 			}
 		}
 
+		// PARETO: Generate multi-objective optimal recommendations
+		if len(workloadRec.Containers) > 0 {
+			// Build metrics for Pareto optimization from first container
+			// (Could be extended to handle multi-container workloads)
+			c := workloadRec.Containers[0]
+			paretoMetrics := &pareto.WorkloadMetrics{
+				Namespace:     workloadRec.Namespace,
+				WorkloadName:  workloadRec.WorkloadName,
+				CurrentCPU:    c.CurrentCPU,
+				CurrentMemory: c.CurrentMemory,
+				AvgCPU:        c.RecommendedCPU,   // Using recommended as proxy for avg
+				AvgMemory:     c.RecommendedMemory,
+				PeakCPU:       int64(float64(c.RecommendedCPU) * 1.2),
+				PeakMemory:    int64(float64(c.RecommendedMemory) * 1.2),
+				P95CPU:        c.RecommendedCPU,
+				P95Memory:     c.RecommendedMemory,
+				P99CPU:        int64(float64(c.RecommendedCPU) * 1.1),
+				P99Memory:     int64(float64(c.RecommendedMemory) * 1.1),
+				Confidence:    c.Confidence,
+				SampleCount:   c.SampleCount,
+			}
+
+			paretoRec, err := r.paretoHelper.GenerateRecommendation(paretoMetrics)
+			if err == nil && paretoRec != nil {
+				klog.V(4).Infof("[%s] Pareto analysis for %s/%s: %s",
+					mode, workloadRec.Namespace, workloadRec.WorkloadName, paretoRec.Summary)
+
+				// Log trade-off options on Pareto frontier
+				if len(paretoRec.ParetoFrontier) > 1 {
+					klog.V(5).Infof("[%s] %s/%s has %d Pareto-optimal strategies: %s",
+						mode, workloadRec.Namespace, workloadRec.WorkloadName,
+						len(paretoRec.ParetoFrontier), r.getParetoStrategySummary(paretoRec.ParetoFrontier))
+				}
+			}
+		}
+
 		for _, containerRec := range workloadRec.Containers {
 			// Convert to applier format
 			rec := &applier.ResourceRecommendation{
@@ -551,4 +590,20 @@ func maintenanceWindowMessage(inWindow bool) string {
 		return "Currently in maintenance window"
 	}
 	return "Outside maintenance window"
+}
+
+// getParetoStrategySummary returns a comma-separated list of strategy names
+func (r *Reconciler) getParetoStrategySummary(solutions []*pareto.Solution) string {
+	if len(solutions) == 0 {
+		return ""
+	}
+
+	result := ""
+	for i, sol := range solutions {
+		if i > 0 {
+			result += ", "
+		}
+		result += sol.ID
+	}
+	return result
 }
