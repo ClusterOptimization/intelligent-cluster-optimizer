@@ -1,0 +1,34 @@
+defaultAction: allow
+
+policies:
+  - name: cap-dev-resources
+    description: Limit resource usage in development to save costs
+    condition: cluster.environment == 'development'
+    action: set-max-memory
+    parameters:
+      max-memory: "512Mi"
+    priority: 100
+    enabled: true
+
+  - name: cap-dev-cpu
+    description: Limit CPU usage in development
+    condition: cluster.environment == 'development'
+    action: set-max-cpu
+    parameters:
+      max-cpu: "500m"
+    priority: 100
+    enabled: true
+
+  - name: allow-aggressive-scaledown
+    description: Allow aggressive scale-downs in dev to save money
+    condition: cluster.environment == 'development' && recommendation.changeType == 'scaledown'
+    action: allow
+    priority: 90
+    enabled: true
+
+  - name: skip-test-namespace
+    description: Don't optimize test namespaces
+    condition: workload.namespace == 'test'
+    action: skip
+    priority: 95
+    enabled: true

@@ -1,0 +1,78 @@
+defaultAction: allow
+
+policies:
+  - name: protect-critical-services
+    description: Never scale down critical production services
+    condition: workload.labels['tier'] == 'critical' && recommendation.changeType == 'scaledown'
+    action: deny
+    priority: 100
+    enabled: true
+
+  - name: minimum-memory-for-databases
+    description: Ensure database workloads have at least 1Gi memory
+    condition: workload.labels['app-type'] == 'database'
+    action: set-min-memory
+    parameters:
+      min-memory: "1Gi"
+    priority: 90
+    enabled: true
+
+  - name: limit-memory-for-batch-jobs
+    description: Cap batch job memory to prevent resource hogging
+    condition: workload.labels['workload-type'] == 'batch'
+    action: set-max-memory
+    parameters:
+      max-memory: "2Gi"
+    priority: 80
+    enabled: true
+
+  - name: minimum-cpu-for-api-servers
+    description: API servers need at least 500m CPU
+    condition: workload.labels['component'] == 'api-server'
+    action: set-min-cpu
+    parameters:
+      min-cpu: "500m"
+    priority: 85
+    enabled: true
+
+  - name: prevent-low-confidence-changes
+    description: Block recommendations with low confidence scores
+    condition: recommendation.confidence < 50
+    action: deny
+    priority: 95
+    enabled: true
+
+  - name: no-scaledown-during-business-hours
+    description: Prevent scaling down during peak hours
+    condition: time.isBusinessHours && recommendation.changeType == 'scaledown'
+    action: skip-scaledown
+    priority: 70
+    enabled: true
+
+  - name: aggressive-weekend-optimization
+    description: Allow more aggressive optimization on weekends
+    condition: time.isWeekend && recommendation.cpuChangePercent > -50
+    action: allow
+    priority: 60
+    enabled: true
+
+  - name: protect-stateful-workloads
+    description: Be conservative with StatefulSets
+    condition: workload.kind == 'StatefulSet' && recommendation.changeType == 'scaledown'
+    action: deny
+    priority: 75
+    enabled: true
+
+  - name: namespace-production-protection
+    description: Require approval for production namespace changes
+    condition: workload.namespace == 'production'
+    action: require-approval
+    priority: 50
+    enabled: true
+
+  - name: prevent-excessive-scaleup
+    description: Block scale-ups over 200% increase
+    condition: recommendation.changeType == 'scaleup' && (recommendation.cpuChangePercent > 200 || recommendation.memoryChangePercent > 200)
+    action: deny
+    priority: 65
+    enabled: true
