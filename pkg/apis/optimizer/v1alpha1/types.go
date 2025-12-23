@@ -86,6 +86,10 @@ type OptimizerConfigSpec struct {
 	// +optional
 	CircuitBreaker *CircuitBreakerConfig `json:"circuitBreaker,omitempty"`
 
+	// GitOpsExport configures automatic export of recommendations to GitOps formats
+	// +optional
+	GitOpsExport *GitOpsExportConfig `json:"gitOpsExport,omitempty"`
+
 	// TargetResources defines which resource types to optimize
 	// +optional
 	// +kubebuilder:default={deployments,statefulsets}
@@ -330,6 +334,87 @@ type CircuitBreakerConfig struct {
 	// +optional
 	// +kubebuilder:default="5m"
 	Timeout string `json:"timeout,omitempty"`
+}
+
+// GitOpsExportConfig defines GitOps export configuration
+type GitOpsExportConfig struct {
+	// Enabled controls whether GitOps export is active
+	// +optional
+	// +kubebuilder:default=false
+	Enabled bool `json:"enabled"`
+
+	// Format specifies the export format (kustomize, kustomize-json6902, helm)
+	// +optional
+	// +kubebuilder:validation:Enum=kustomize;kustomize-json6902;helm
+	// +kubebuilder:default=kustomize
+	Format GitOpsFormat `json:"format,omitempty"`
+
+	// OutputPath is the directory where exports will be written
+	// +optional
+	// +kubebuilder:default="./gitops-exports"
+	OutputPath string `json:"outputPath,omitempty"`
+
+	// AutoCommit enables automatic git commits of exported recommendations
+	// +optional
+	// +kubebuilder:default=false
+	AutoCommit bool `json:"autoCommit,omitempty"`
+
+	// GitRepository contains git repository configuration
+	// Only used if AutoCommit is true
+	// +optional
+	GitRepository *GitRepositoryConfig `json:"gitRepository,omitempty"`
+}
+
+// GitOpsFormat defines the export format
+// +kubebuilder:validation:Enum=kustomize;kustomize-json6902;helm
+type GitOpsFormat string
+
+const (
+	// GitOpsFormatKustomize exports as Kustomize strategic merge patches
+	GitOpsFormatKustomize GitOpsFormat = "kustomize"
+	// GitOpsFormatKustomizeJSON6902 exports as Kustomize JSON 6902 patches
+	GitOpsFormatKustomizeJSON6902 GitOpsFormat = "kustomize-json6902"
+	// GitOpsFormatHelm exports as Helm values overrides
+	GitOpsFormatHelm GitOpsFormat = "helm"
+)
+
+// GitRepositoryConfig defines git repository configuration
+type GitRepositoryConfig struct {
+	// URL is the git repository URL
+	// +required
+	URL string `json:"url"`
+
+	// Branch is the branch to commit to
+	// +optional
+	// +kubebuilder:default="main"
+	Branch string `json:"branch,omitempty"`
+
+	// BaseBranch is the base branch to create PRs against
+	// +optional
+	// +kubebuilder:default="main"
+	BaseBranch string `json:"baseBranch,omitempty"`
+
+	// CommitMessage is the commit message template
+	// +optional
+	// +kubebuilder:default="chore: apply resource optimizations"
+	CommitMessage string `json:"commitMessage,omitempty"`
+
+	// AuthSecretName is the name of the secret containing git credentials
+	// +optional
+	AuthSecretName string `json:"authSecretName,omitempty"`
+
+	// CreatePR indicates whether to create a pull request
+	// +optional
+	// +kubebuilder:default=false
+	CreatePR bool `json:"createPR,omitempty"`
+
+	// PRTitle is the pull request title
+	// +optional
+	PRTitle string `json:"prTitle,omitempty"`
+
+	// PRBody is the pull request body
+	// +optional
+	PRBody string `json:"prBody,omitempty"`
 }
 
 // TargetResourceType defines which resource types to optimize

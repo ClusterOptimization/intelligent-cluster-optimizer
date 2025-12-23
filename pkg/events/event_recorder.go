@@ -20,6 +20,8 @@ const (
 	ReasonRecommendationSkipped    = "RecommendationSkipped"
 	ReasonAnomalyDetected          = "AnomalyDetected"
 	ReasonPeakLoadPredicted        = "PeakLoadPredicted"
+	ReasonGitOpsExportSucceeded    = "GitOpsExportSucceeded"
+	ReasonGitOpsExportFailed       = "GitOpsExportFailed"
 )
 
 type OptimizerEventRecorder struct {

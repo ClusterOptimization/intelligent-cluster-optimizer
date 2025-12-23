@@ -9,6 +9,7 @@ import (
 	"intelligent-cluster-optimizer/pkg/anomaly"
 	"intelligent-cluster-optimizer/pkg/applier"
 	"intelligent-cluster-optimizer/pkg/events"
+	"intelligent-cluster-optimizer/pkg/gitops"
 	"intelligent-cluster-optimizer/pkg/pareto"
 	"intelligent-cluster-optimizer/pkg/prediction"
 	"intelligent-cluster-optimizer/pkg/profile"
@@ -43,6 +44,7 @@ type Reconciler struct {
 	anomalyChecker         *anomaly.WorkloadChecker
 	workloadPredictor      *prediction.WorkloadPredictor
 	paretoHelper           *pareto.RecommendationHelper
+	gitopsExporter         gitops.Exporter
 }
 
 func NewReconciler(kubeClient kubernetes.Interface, eventRecorder record.EventRecorder) *Reconciler {
@@ -61,6 +63,7 @@ func NewReconciler(kubeClient kubernetes.Interface, eventRecorder record.EventRe
 		anomalyChecker:         anomaly.NewWorkloadChecker(),
 		workloadPredictor:      prediction.NewWorkloadPredictor(),
 		paretoHelper:           pareto.NewRecommendationHelper(),
+		gitopsExporter:         gitops.NewExporter(),
 	}
 }
 
@@ -314,6 +317,21 @@ func (r *Reconciler) processRecommendations(ctx context.Context, config *optimiz
 
 	klog.V(3).Infof("[%s] Generated %d workload recommendations (estimated savings: $%.2f/month)",
 		mode, len(recommendations), totalSavingsPerMonth)
+
+	// Export to GitOps format if enabled
+	if config.Spec.GitOpsExport != nil && config.Spec.GitOpsExport.Enabled {
+		if err := r.exportToGitOps(config, recommendations, mode); err != nil {
+			klog.Warningf("[%s] Failed to export recommendations to GitOps: %v", mode, err)
+			r.optimizerEvents.RecordWarningEvent(config, events.ReasonGitOpsExportFailed,
+				fmt.Sprintf("GitOps export failed: %v", err))
+		} else {
+			klog.Infof("[%s] Successfully exported %d recommendations to GitOps (%s format)",
+				mode, len(recommendations), config.Spec.GitOpsExport.Format)
+			r.optimizerEvents.RecordNormalEvent(config, events.ReasonGitOpsExportSucceeded,
+				fmt.Sprintf("Exported %d recommendations to GitOps (%s format)",
+					len(recommendations), config.Spec.GitOpsExport.Format))
+		}
+	}
 
 	// Process each workload recommendation
 	var appliedCount, skippedCount int
@@ -606,4 +624,81 @@ func (r *Reconciler) getParetoStrategySummary(solutions []*pareto.Solution) stri
 		result += sol.ID
 	}
 	return result
+}
+
+// exportToGitOps exports recommendations to GitOps format (Kustomize or Helm)
+func (r *Reconciler) exportToGitOps(
+	config *optimizerv1alpha1.OptimizerConfig,
+	recommendations []recommendation.WorkloadRecommendation,
+	mode string,
+) error {
+	gitopsConfig := config.Spec.GitOpsExport
+	if gitopsConfig == nil || !gitopsConfig.Enabled {
+		return nil
+	}
+
+	// Convert recommendations to GitOps format
+	var gitopsRecommendations []gitops.ResourceRecommendation
+	for _, workloadRec := range recommendations {
+		for _, containerRec := range workloadRec.Containers {
+			gitopsRec := gitops.ResourceRecommendation{
+				Namespace:         workloadRec.Namespace,
+				Name:              workloadRec.WorkloadName,
+				Kind:              workloadRec.WorkloadKind,
+				ContainerName:     containerRec.ContainerName,
+				RecommendedCPU:    containerRec.RecommendedCPU,
+				RecommendedMemory: containerRec.RecommendedMemory,
+				SetLimits:         false, // Could be configurable
+				Confidence:        containerRec.Confidence,
+				Reason:            fmt.Sprintf("P%d CPU, P%d Memory, %d samples", containerRec.CPUPercentile, containerRec.MemoryPercentile, containerRec.SampleCount),
+			}
+			gitopsRecommendations = append(gitopsRecommendations, gitopsRec)
+		}
+	}
+
+	if len(gitopsRecommendations) == 0 {
+		klog.V(4).Infof("[%s] No recommendations to export to GitOps", mode)
+		return nil
+	}
+
+	// Map format from CRD to GitOps package
+	var exportFormat gitops.ExportFormat
+	switch gitopsConfig.Format {
+	case optimizerv1alpha1.GitOpsFormatKustomize, "":
+		exportFormat = gitops.FormatKustomize
+	case optimizerv1alpha1.GitOpsFormatKustomizeJSON6902:
+		exportFormat = gitops.FormatKustomizeJSON6902
+	case optimizerv1alpha1.GitOpsFormatHelm:
+		exportFormat = gitops.FormatHelm
+	default:
+		exportFormat = gitops.FormatKustomize
+	}
+
+	// Configure export
+	exportConfig := gitops.ExportConfig{
+		Format:     exportFormat,
+		OutputPath: gitopsConfig.OutputPath,
+		Metadata: map[string]string{
+			"generated-by":   "intelligent-cluster-optimizer",
+			"optimizer-name": config.Name,
+			"namespace":      config.Namespace,
+			"timestamp":      time.Now().Format(time.RFC3339),
+		},
+	}
+
+	// Perform export
+	result, err := r.gitopsExporter.Export(gitopsRecommendations, exportConfig)
+	if err != nil {
+		return fmt.Errorf("failed to export recommendations: %w", err)
+	}
+
+	klog.V(4).Infof("[%s] GitOps export generated %d files at %s",
+		mode, len(result.Files), gitopsConfig.OutputPath)
+
+	// Log exported files for visibility
+	for filename := range result.Files {
+		klog.V(5).Infof("[%s] GitOps exported file: %s", mode, filename)
+	}
+
+	return nil
 }
