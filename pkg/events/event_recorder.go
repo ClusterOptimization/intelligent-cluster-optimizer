@@ -9,6 +9,8 @@ import (
 
 const (
 	ReasonOptimizationApplied      = "OptimizationApplied"
+	ReasonOptimizationBlocked      = "OptimizationBlocked"
+	ReasonOptimizationDegraded     = "OptimizationDegraded"
 	ReasonDryRunSimulated          = "DryRunSimulated"
 	ReasonHPAConflictDetected      = "HPAConflictDetected"
 	ReasonPDBViolation             = "PDBViolation"
