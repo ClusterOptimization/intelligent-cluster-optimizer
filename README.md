@@ -21,11 +21,24 @@ This project implements an intelligent resource optimizer for Kubernetes cluster
 │  Metrics        │────▶│  Analysis       │────▶│  Recommendation │
 │  Collection     │     │  Engine         │     │  Engine         │
 └─────────────────┘     └─────────────────┘     └─────────────────┘
+        │                       │                       │
+        ▼                       ▼                       ▼
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│  Anomaly        │     │  Prediction     │     │  Pareto         │
+│  Detection      │     │  (Holt-Winters) │     │  Optimizer      │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
+                                                        │
+                                ┌───────────────────────┤
+                                ▼                       ▼
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│  Policy         │────▶│  SLA            │────▶│  Safety         │
+│  Engine         │     │  Monitor        │     │  Checks         │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
                                                         │
                                                         ▼
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│  Rollback       │◀────│  Applier        │◀────│  Safety         │
-│  Manager        │     │                 │     │  Checks         │
+│  Rollback       │◀────│  Applier        │     │  GitOps         │
+│  Manager        │     │                 │     │  Exporter       │
 └─────────────────┘     └─────────────────┘     └─────────────────┘
 ```
 
@@ -48,6 +61,29 @@ This project implements an intelligent resource optimizer for Kubernetes cluster
 | Circuit Breaker | ✅ Done | Stops scaling after repeated failures |
 | Emergency Rollback | ✅ Done | Reverts changes if health checks fail |
 | HPA/PDB Conflict Check | ✅ Done | Avoids conflicts with existing autoscalers |
+
+### Advanced Analytics
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| Anomaly Detection | ✅ Done | Multi-method consensus (Z-Score, IQR, Moving Average) |
+| Time Series Prediction | ✅ Done | Holt-Winters forecasting for proactive scaling |
+| Pareto Optimization | ✅ Done | Multi-objective optimization (cost, performance, reliability, efficiency, stability) |
+
+### Policy & Governance
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| Policy Engine | ✅ Done | Expression-based policies with YAML configuration |
+| SLA Monitoring | ✅ Done | Latency, error rate, availability, throughput tracking |
+| Health Checker | ✅ Done | Control chart-based health assessment |
+
+### GitOps Integration
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| Kustomize Export | ✅ Done | Strategic merge and JSON 6902 patch generation |
+| Helm Export | ✅ Done | Values.yaml generation for Helm charts |
 
 ### Infrastructure
 
@@ -94,7 +130,14 @@ intelligent-cluster-optimizer/
 │   ├── storage/         # Metrics storage
 │   ├── applier/         # Change application
 │   ├── scaler/          # Vertical scaling
-│   └── scheduler/       # Maintenance windows
+│   ├── scheduler/       # Maintenance windows
+│   ├── anomaly/         # Statistical anomaly detection
+│   ├── prediction/      # Time series forecasting (Holt-Winters)
+│   ├── pareto/          # Multi-objective Pareto optimization
+│   ├── policy/          # Policy engine with expression evaluation
+│   ├── sla/             # SLA monitoring and health checking
+│   ├── gitops/          # GitOps export (Kustomize, Helm)
+│   └── events/          # Kubernetes event broadcasting
 └── go.mod
 ```
 
@@ -105,10 +148,13 @@ intelligent-cluster-optimizer/
 ### 1. Data Collection
 - Scrapes CPU/memory metrics from Kubernetes metrics API
 - Stores 24 hours of historical data per container
+- Detects anomalies using statistical methods (Z-Score, IQR, Moving Average)
 
 ### 2. Analysis
 - **Leak Detection**: Analyzes memory slope; blocks scaling if leak detected
 - **Pattern Detection**: Identifies business hours, night batch, spike patterns
+- **Anomaly Detection**: Multi-method consensus for outlier detection
+- **Time Series Prediction**: Holt-Winters forecasting for proactive scaling
 - **Profile Resolution**: Applies environment-specific settings (prod vs dev)
 
 ### 3. Recommendation Generation
@@ -117,16 +163,40 @@ intelligent-cluster-optimizer/
 - Boosts memory for OOM-affected containers
 - Scores confidence based on data quality
 - Estimates cost savings
+- **Pareto Optimization**: Generates multiple solutions balancing:
+  - Cost (minimize resource spend)
+  - Performance (headroom above average usage)
+  - Reliability (buffer for peak loads)
+  - Efficiency (resource utilization)
+  - Stability (minimize change frequency)
 
-### 4. Safety Checks
+### 4. Policy Evaluation
+- Evaluates YAML-defined policies with expression-based conditions
+- Supports actions: allow, deny, skip, modify, require-approval
+- Enforces resource limits (min/max CPU/memory)
+- Priority-based policy ordering
+
+### 5. SLA Monitoring
+- Tracks latency, error rate, availability, throughput SLAs
+- Percentile-based latency checks (P95, P99)
+- Control chart-based health assessment
+- Blocks scaling during SLA violations
+
+### 6. Safety Checks
 - Verifies no HPA/PDB conflicts
 - Checks circuit breaker state
 - Validates recommendation confidence threshold
+- Enforces MaxChangePercent limits
 
-### 5. Application
+### 7. Application
 - Patches deployment resource requests/limits
 - Monitors health for rollback window
 - Records events for audit trail
+
+### 8. GitOps Export
+- Exports recommendations as Kustomize patches (strategic merge or JSON 6902)
+- Generates Helm values.yaml for GitOps workflows
+- Supports PR-based review processes
 
 ---
 
@@ -156,6 +226,12 @@ go test ./pkg/recommendation/... -run Integration -v
 go test ./pkg/leakdetector/... -v
 go test ./pkg/timepattern/... -v
 go test ./pkg/safety/... -v
+go test ./pkg/anomaly/... -v
+go test ./pkg/prediction/... -v
+go test ./pkg/pareto/... -v
+go test ./pkg/policy/... -v
+go test ./pkg/sla/... -v
+go test ./pkg/gitops/... -v
 ```
 
 ---
@@ -163,11 +239,10 @@ go test ./pkg/safety/... -v
 ## Pending Work
 
 - [ ] Stress tests (10k workloads, 1M samples)
-- [ ] Prometheus integration
-- [ ] Webhook notifications
-- [ ] Web dashboard
-- [ ] Helm chart for deployment
-- [ ] Documentation for each component
+- [ ] Prometheus metrics integration
+- [ ] Webhook notifications (Slack, PagerDuty)
+- [ ] Web dashboard for visualization
+- [ ] Helm chart for production deployment
 
 ---
 
@@ -176,4 +251,6 @@ go test ./pkg/safety/... -v
 - **Language**: Go 1.21+
 - **Framework**: Kubernetes controller-runtime
 - **APIs**: Kubernetes metrics API, custom CRDs
+- **Policy Engine**: expr-lang/expr for expression evaluation
 - **Testing**: Go testing, table-driven tests, CSV test data
+- **GitOps**: Kustomize patches, Helm values generation
