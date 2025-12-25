@@ -1,0 +1,100 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: intelligent-optimizer-controller
+  labels:
+    app.kubernetes.io/name: intelligent-cluster-optimizer
+    app.kubernetes.io/component: controller
+rules:
+# Core resources - read/write for optimizations
+- apiGroups: [""]
+  resources:
+    - pods
+    - pods/log
+    - pods/status
+  verbs: ["get", "list", "watch"]
+
+- apiGroups: [""]
+  resources:
+    - events
+  verbs: ["create", "patch", "update"]
+
+- apiGroups: [""]
+  resources:
+    - configmaps
+    - secrets
+  verbs: ["get", "list", "watch"]
+
+# Workload resources - read and update for optimizations
+- apiGroups: ["apps"]
+  resources:
+    - deployments
+    - statefulsets
+    - daemonsets
+    - replicasets
+  verbs: ["get", "list", "watch", "update", "patch"]
+
+- apiGroups: ["apps"]
+  resources:
+    - deployments/status
+    - statefulsets/status
+    - daemonsets/status
+  verbs: ["get"]
+
+# HPA awareness
+- apiGroups: ["autoscaling"]
+  resources:
+    - horizontalpodautoscalers
+  verbs: ["get", "list", "watch"]
+
+# PDB awareness
+- apiGroups: ["policy"]
+  resources:
+    - poddisruptionbudgets
+  verbs: ["get", "list", "watch"]
+
+# Metrics API access
+- apiGroups: ["metrics.k8s.io"]
+  resources:
+    - pods
+    - nodes
+  verbs: ["get", "list"]
+
+# Custom resources (OptimizerConfig)
+- apiGroups: ["optimizer.intelligent-cluster-optimizer.io"]
+  resources:
+    - optimizerconfigs
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+- apiGroups: ["optimizer.intelligent-cluster-optimizer.io"]
+  resources:
+    - optimizerconfigs/status
+  verbs: ["get", "update", "patch"]
+
+- apiGroups: ["optimizer.intelligent-cluster-optimizer.io"]
+  resources:
+    - optimizerconfigs/finalizers
+  verbs: ["update"]
+
+# Leader election
+- apiGroups: ["coordination.k8s.io"]
+  resources:
+    - leases
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: intelligent-optimizer-controller
+  labels:
+    app.kubernetes.io/name: intelligent-cluster-optimizer
+    app.kubernetes.io/component: controller
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: intelligent-optimizer-controller
+subjects:
+- kind: ServiceAccount
+  name: intelligent-optimizer-controller
+  namespace: intelligent-optimizer-system

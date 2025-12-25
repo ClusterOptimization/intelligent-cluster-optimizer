@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: intelligent-optimizer-metrics
+  namespace: intelligent-optimizer-system
+  labels:
+    app.kubernetes.io/name: intelligent-cluster-optimizer
+    app.kubernetes.io/component: controller
+spec:
+  type: ClusterIP
+  ports:
+  - name: metrics
+    port: 8080
+    targetPort: metrics
+    protocol: TCP
+  selector:
+    app.kubernetes.io/name: intelligent-cluster-optimizer
+    app.kubernetes.io/component: controller
