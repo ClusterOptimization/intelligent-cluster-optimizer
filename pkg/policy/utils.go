@@ -121,7 +121,7 @@ func parseMemoryValue(value string) (int64, error) {
 
 	// Parse the unit suffix
 	unit := matches[2]
-	multiplier := int64(1)
+	var multiplier int64
 
 	switch unit {
 	case "":

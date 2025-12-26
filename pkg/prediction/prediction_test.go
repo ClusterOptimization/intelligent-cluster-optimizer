@@ -29,15 +29,6 @@ func generateSeasonalData(n, period int, level, trend, seasonalAmplitude float64
 	return data
 }
 
-// generateTrendData generates data with just trend (no seasonality)
-func generateTrendData(n int, intercept, slope float64) []float64 {
-	data := make([]float64, n)
-	for i := 0; i < n; i++ {
-		data[i] = intercept + slope*float64(i) + float64(i%3)*0.5
-	}
-	return data
-}
-
 // === Holt-Winters Tests ===
 
 func TestHoltWinters_FitAndPredict(t *testing.T) {
@@ -550,7 +541,7 @@ func BenchmarkHoltWinters_Fit(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		hw := NewHoltWintersWithConfig(config)
-		hw.Fit(data)
+		_ = hw.Fit(data)
 	}
 }
 
@@ -562,11 +553,11 @@ func BenchmarkHoltWinters_Predict(b *testing.B) {
 	config.MinDataPoints = 2
 
 	hw := NewHoltWintersWithConfig(config)
-	hw.Fit(data)
+	_ = hw.Fit(data)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		hw.Predict(24)
+		_, _ = hw.Predict(24)
 	}
 }
 
@@ -576,7 +567,7 @@ func BenchmarkDecomposer_Decompose(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		decomposer.Decompose(data)
+		_, _ = decomposer.Decompose(data)
 	}
 }
 

@@ -183,16 +183,3 @@ func determineSeverity(deviation float64) Severity {
 	}
 }
 
-// determineAnomalyType determines the type of anomaly based on value comparison
-func determineAnomalyType(value, expected float64, resourceType string) AnomalyType {
-	if value > expected {
-		if resourceType == "memory" {
-			return AnomalyTypeMemorySpike
-		}
-		return AnomalyTypeCPUSpike
-	}
-	if resourceType == "memory" {
-		return AnomalyTypeMemoryDrop
-	}
-	return AnomalyTypeCPUDrop
-}

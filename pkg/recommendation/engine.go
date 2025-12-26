@@ -419,22 +419,6 @@ type containerSample struct {
 	requestMemory int64
 }
 
-// generateWorkloadRecommendation generates recommendations for a single workload
-func (e *Engine) generateWorkloadRecommendation(
-	namespace, workloadName string,
-	containerMetrics map[string][]containerSample,
-	cpuPercentile, memoryPercentile int,
-	safetyMargin float64,
-	minSamples int,
-	thresholds *optimizerv1alpha1.ResourceThresholds,
-) *WorkloadRecommendation {
-	return e.generateWorkloadRecommendationWithOOM(
-		namespace, workloadName, containerMetrics,
-		cpuPercentile, memoryPercentile, safetyMargin,
-		minSamples, thresholds, nil,
-	)
-}
-
 // generateWorkloadRecommendationWithOOM generates recommendations with OOM-aware memory adjustments
 func (e *Engine) generateWorkloadRecommendationWithOOM(
 	namespace, workloadName string,
@@ -727,27 +711,6 @@ func calculatePercentile(values []int64, percentile int) int64 {
 	}
 
 	return sorted[rank-1]
-}
-
-// calculateConfidence returns a confidence score based on sample count
-// More samples = higher confidence, up to 1.0
-func calculateConfidence(sampleCount, minSamples int) float64 {
-	if sampleCount < minSamples {
-		return 0.0
-	}
-
-	// Confidence increases logarithmically with sample count
-	// At minSamples: ~0.5
-	// At 2x minSamples: ~0.7
-	// At 10x minSamples: ~0.9
-	// At 100x minSamples: ~1.0
-	ratio := float64(sampleCount) / float64(minSamples)
-	confidence := 1.0 - (1.0 / (1.0 + ratio*0.5))
-
-	if confidence > 1.0 {
-		confidence = 1.0
-	}
-	return confidence
 }
 
 // applyThresholds ensures the recommendation is within configured bounds

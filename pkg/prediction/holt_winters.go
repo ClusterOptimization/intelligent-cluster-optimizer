@@ -333,7 +333,7 @@ func (hw *HoltWinters) Predict(horizons int) (*ForecastResult, error) {
 	// Determine last timestamp
 	var lastTimestamp time.Time
 	var hasTimestamps bool
-	if hw.timestamps != nil && len(hw.timestamps) > 0 {
+	if len(hw.timestamps) > 0 {
 		lastTimestamp = hw.timestamps[len(hw.timestamps)-1]
 		hasTimestamps = true
 	}

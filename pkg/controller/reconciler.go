@@ -233,61 +233,6 @@ func (r *Reconciler) updateCondition(
 	return nil
 }
 
-func (r *Reconciler) checkHPAConflicts(ctx context.Context, config *optimizerv1alpha1.OptimizerConfig) (bool, error) {
-	hasConflicts := false
-
-	for _, ns := range config.Spec.TargetNamespaces {
-		for _, resourceType := range config.Spec.TargetResources {
-			kind := resourceTypeToKind(resourceType)
-			result, err := r.hpaChecker.CheckHPAConflict(ctx, ns, kind, "")
-			if err != nil {
-				return false, err
-			}
-			if result.HasConflict {
-				hasConflicts = true
-				if err := r.updateCondition(config,
-					optimizerv1alpha1.ConditionTypeHPAConflict,
-					optimizerv1alpha1.ConditionTrue,
-					"ConflictDetected",
-					result.Message); err != nil {
-					return false, err
-				}
-				klog.Warningf("HPA conflict in %s/%s: %s", ns, kind, result.Message)
-			}
-		}
-	}
-
-	return hasConflicts, nil
-}
-
-func (r *Reconciler) checkPDBViolations(ctx context.Context, config *optimizerv1alpha1.OptimizerConfig) (bool, error) {
-	hasViolations := false
-	plannedDisruption := int32(1)
-
-	for _, ns := range config.Spec.TargetNamespaces {
-		for _, resourceType := range config.Spec.TargetResources {
-			kind := resourceTypeToKind(resourceType)
-			result, err := r.pdbChecker.CheckPDBSafety(ctx, ns, kind, "", plannedDisruption)
-			if err != nil {
-				return false, err
-			}
-			if result.HasPDB && !result.IsSafe {
-				hasViolations = true
-				if err := r.updateCondition(config,
-					optimizerv1alpha1.ConditionTypePDBViolation,
-					optimizerv1alpha1.ConditionTrue,
-					"ViolationDetected",
-					result.Message); err != nil {
-					return false, err
-				}
-				klog.Warningf("PDB violation in %s/%s: %s", ns, kind, result.Message)
-			}
-		}
-	}
-
-	return hasViolations, nil
-}
-
 func (r *Reconciler) processRecommendations(ctx context.Context, config *optimizerv1alpha1.OptimizerConfig, mode string) error {
 	klog.V(4).Infof("[%s] Processing recommendations for OptimizerConfig %s/%s", mode, config.Namespace, config.Name)
 
@@ -640,19 +585,6 @@ func formatMemory(bytes int64) string {
 	return fmt.Sprintf("%d", bytes)
 }
 
-func resourceTypeToKind(resourceType optimizerv1alpha1.TargetResourceType) string {
-	switch resourceType {
-	case optimizerv1alpha1.TargetResourceDeployments:
-		return "Deployment"
-	case optimizerv1alpha1.TargetResourceStatefulSets:
-		return "StatefulSet"
-	case optimizerv1alpha1.TargetResourceDaemonSets:
-		return "DaemonSet"
-	default:
-		return "Deployment"
-	}
-}
-
 func boolToConditionStatus(b bool) optimizerv1alpha1.ConditionStatus {
 	if b {
 		return optimizerv1alpha1.ConditionTrue
@@ -758,30 +690,6 @@ func (r *Reconciler) exportToGitOps(
 	}
 
 	return nil
-}
-
-// convertStorageMetricsToSLAMetrics converts storage metrics to SLA metrics format
-func (r *Reconciler) convertStorageMetricsToSLAMetrics(namespace, workload string, duration time.Duration) []sla.Metric {
-	storageMetrics := r.metricsStorage.GetMetricsByWorkload(namespace, workload, duration)
-
-	slaMetrics := make([]sla.Metric, 0, len(storageMetrics))
-	for _, sm := range storageMetrics {
-		// Aggregate CPU usage across all containers
-		var totalCPU int64
-		for _, container := range sm.Containers {
-			totalCPU += container.UsageCPU
-		}
-
-		// Convert CPU usage (millicores) to latency-like metric
-		// In a real implementation, you'd collect actual latency metrics
-		// For now, we'll use CPU usage as a proxy
-		slaMetrics = append(slaMetrics, sla.Metric{
-			Timestamp: sm.Timestamp,
-			Value:     float64(totalCPU) / 10.0, // Scale to reasonable latency range
-		})
-	}
-
-	return slaMetrics
 }
 
 // checkSystemHealth performs SLA health check for the system

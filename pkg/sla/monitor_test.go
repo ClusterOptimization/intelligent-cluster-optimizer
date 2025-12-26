@@ -61,7 +61,7 @@ func TestMonitor_RemoveSLA(t *testing.T) {
 		Window:    5 * time.Minute,
 	}
 
-	monitor.AddSLA(sla)
+	_ = monitor.AddSLA(sla)
 
 	err := monitor.RemoveSLA("test-sla")
 	if err != nil {
@@ -130,7 +130,7 @@ func TestMonitor_CheckErrorRateSLA(t *testing.T) {
 		Window:    5 * time.Minute,
 	}
 
-	monitor.AddSLA(sla)
+	_ = monitor.AddSLA(sla)
 
 	now := time.Now()
 	metrics := []Metric{
@@ -162,7 +162,7 @@ func TestMonitor_CheckAvailabilitySLA(t *testing.T) {
 		Window:    5 * time.Minute,
 	}
 
-	monitor.AddSLA(sla)
+	_ = monitor.AddSLA(sla)
 
 	now := time.Now()
 	// 20% downtime (2 out of 10 down)
@@ -193,7 +193,7 @@ func TestMonitor_CheckAllSLAs(t *testing.T) {
 	monitor := NewMonitor()
 
 	// Add multiple SLAs
-	monitor.AddSLA(SLADefinition{
+	_ = monitor.AddSLA(SLADefinition{
 		Name:      "latency",
 		Type:      SLATypeLatency,
 		Target:    100.0,
@@ -201,7 +201,7 @@ func TestMonitor_CheckAllSLAs(t *testing.T) {
 		Window:    5 * time.Minute,
 	})
 
-	monitor.AddSLA(SLADefinition{
+	_ = monitor.AddSLA(SLADefinition{
 		Name:      "error-rate",
 		Type:      SLATypeErrorRate,
 		Target:    0.1,
@@ -247,7 +247,7 @@ func TestMonitor_ListSLAs(t *testing.T) {
 	}
 
 	for _, sla := range slas {
-		monitor.AddSLA(sla)
+		_ = monitor.AddSLA(sla)
 	}
 
 	listed := monitor.ListSLAs()
@@ -267,7 +267,7 @@ func TestMonitor_WindowFiltering(t *testing.T) {
 		Window:    2 * time.Minute,
 	}
 
-	monitor.AddSLA(sla)
+	_ = monitor.AddSLA(sla)
 
 	now := time.Now()
 	metrics := []Metric{

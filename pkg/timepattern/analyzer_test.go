@@ -5,20 +5,6 @@ import (
 	"time"
 )
 
-// Helper to create samples for a specific hour
-func samplesAtHour(baseTime time.Time, hour int, count int, cpuBase int64, memoryBase int64) []Sample {
-	samples := make([]Sample, count)
-	for i := 0; i < count; i++ {
-		t := time.Date(baseTime.Year(), baseTime.Month(), baseTime.Day(), hour, i*10, 0, 0, baseTime.Location())
-		samples[i] = Sample{
-			Timestamp: t,
-			CPU:       cpuBase + int64(i*10), // Add some variance
-			Memory:    memoryBase + int64(i*1024*1024),
-		}
-	}
-	return samples
-}
-
 // Helper to create samples across multiple days
 func samplesForDays(startDate time.Time, days int, hoursPattern map[int]int64) []Sample {
 	var samples []Sample

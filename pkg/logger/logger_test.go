@@ -55,7 +55,7 @@ func TestNewLogger(t *testing.T) {
 				t.Error("Expected non-nil logger")
 			}
 			if logger != nil {
-				defer logger.Sync()
+				defer func() { _ = logger.Sync() }()
 			}
 		})
 	}
@@ -69,7 +69,7 @@ func TestNewProductionLogger(t *testing.T) {
 	if logger == nil {
 		t.Fatal("Expected non-nil logger")
 	}
-	defer logger.Sync()
+	defer func() { _ = logger.Sync() }()
 }
 
 func TestNewDevelopmentLogger(t *testing.T) {
@@ -80,7 +80,7 @@ func TestNewDevelopmentLogger(t *testing.T) {
 	if logger == nil {
 		t.Fatal("Expected non-nil logger")
 	}
-	defer logger.Sync()
+	defer func() { _ = logger.Sync() }()
 }
 
 func TestInitGlobalLogger(t *testing.T) {
@@ -93,7 +93,7 @@ func TestInitGlobalLogger(t *testing.T) {
 	if logger == nil {
 		t.Fatal("Expected non-nil global logger")
 	}
-	defer logger.Sync()
+	defer func() { _ = logger.Sync() }()
 }
 
 func TestGetLogger(t *testing.T) {
@@ -117,7 +117,7 @@ func TestLoggerWithFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewDevelopmentLogger() error = %v", err)
 	}
-	defer logger.Sync()
+	defer func() { _ = logger.Sync() }()
 
 	// Test WithFields
 	loggerWithFields := logger.WithFields("key1", "value1", "key2", 123)
@@ -134,7 +134,7 @@ func TestLoggerWithError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewDevelopmentLogger() error = %v", err)
 	}
-	defer logger.Sync()
+	defer func() { _ = logger.Sync() }()
 
 	// Test WithError
 	testErr := errors.New("test error")
@@ -153,7 +153,7 @@ func TestGlobalLoggerFunctions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("InitGlobalLogger() error = %v", err)
 	}
-	defer Sync()
+	defer func() { _ = Sync() }()
 
 	// Test all log level functions
 	Debug("debug message")
@@ -186,7 +186,7 @@ func TestLoggerLevels(t *testing.T) {
 			if err != nil {
 				t.Fatalf("NewLogger(%s) error = %v", level, err)
 			}
-			defer logger.Sync()
+			defer func() { _ = logger.Sync() }()
 
 			// Try logging at different levels
 			logger.Debug("debug")

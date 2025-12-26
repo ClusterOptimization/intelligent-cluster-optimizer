@@ -356,7 +356,7 @@ func (v *VerticalScaler) waitForRolloutComplete(ctx context.Context, namespace, 
 	timeout := 5 * time.Minute
 	interval := 5 * time.Second
 
-	return wait.PollImmediate(interval, timeout, func() (bool, error) {
+	return wait.PollUntilContextTimeout(ctx, interval, timeout, true, func(ctx context.Context) (bool, error) {
 		switch kind {
 		case "Deployment":
 			deploy, err := v.kubeClient.AppsV1().Deployments(namespace).Get(ctx, name, metav1.GetOptions{})
@@ -382,7 +382,7 @@ func (v *VerticalScaler) waitForPodReady(ctx context.Context, namespace, podName
 	timeout := 3 * time.Minute
 	interval := 5 * time.Second
 
-	return wait.PollImmediate(interval, timeout, func() (bool, error) {
+	return wait.PollUntilContextTimeout(ctx, interval, timeout, true, func(ctx context.Context) (bool, error) {
 		pod, err := v.kubeClient.CoreV1().Pods(namespace).Get(ctx, podName, metav1.GetOptions{})
 		if err != nil {
 			return false, nil

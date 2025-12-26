@@ -375,13 +375,17 @@ func TestRecommendationHelper_GetRecommendationForProfile(t *testing.T) {
 		SampleCount:   100,
 	}
 
-	rec, _ := helper.GenerateRecommendation(metrics)
+	rec, err := helper.GenerateRecommendation(metrics)
+	if err != nil {
+		t.Fatalf("Failed to generate recommendation: %v", err)
+	}
 
 	profiles := []string{"production", "development", "performance", "staging"}
 	for _, profile := range profiles {
 		sol := helper.GetRecommendationForProfile(rec, profile)
 		if sol == nil {
 			t.Errorf("Should get recommendation for profile %s", profile)
+			continue
 		}
 		t.Logf("Profile %s: %s (CPU=%dm)", profile, sol.ID, sol.CPURequest)
 	}
@@ -491,7 +495,7 @@ func BenchmarkRecommendationHelper_GenerateRecommendation(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		helper.GenerateRecommendation(metrics)
+		_, _ = helper.GenerateRecommendation(metrics)
 	}
 }
 
