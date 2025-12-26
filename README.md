@@ -213,6 +213,101 @@ The integration tests validate these real-world scenarios:
 
 ---
 
+## Quick Start
+
+### Prerequisites
+
+- Go 1.21+
+- Kubernetes cluster with metrics-server installed
+- kubectl configured to access your cluster
+
+### Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/intelligent-cluster-optimizer.git
+cd intelligent-cluster-optimizer
+
+# Build all binaries
+go build -o bin/optimizer-controller ./cmd/controller/
+go build -o bin/optimizer-collector ./cmd/collector/
+go build -o bin/optctl ./cmd/optctl/
+
+# Install CRD
+kubectl apply -f config/crd/
+```
+
+### Basic Usage
+
+```bash
+# Run the controller (connects to current kubeconfig context)
+./bin/optimizer-controller
+
+# Use the CLI to get recommendations
+./bin/optctl recommend --namespace default
+
+# Export recommendations to GitOps format
+./bin/optctl export --format kustomize --output ./patches/
+```
+
+---
+
+## CI/CD Pipeline
+
+This project uses GitHub Actions for continuous integration and delivery. The pipeline runs automatically on every push to `main` and on pull requests.
+
+### Pipeline Stages
+
+```
+┌─────────┐     ┌─────────┐     ┌──────────┐     ┌─────────┐     ┌─────────┐
+│  Lint   │────▶│  Test   │────▶│ Security │────▶│  Build  │────▶│ Release │
+└─────────┘     └─────────┘     └──────────┘     └─────────┘     └─────────┘
+```
+
+| Stage | Tools | Description |
+|-------|-------|-------------|
+| **Lint** | gofmt, golangci-lint | Code formatting and static analysis |
+| **Test** | go test, Codecov | Unit tests with race detection and coverage |
+| **Security** | gosec, govulncheck | Security vulnerability scanning |
+| **Build** | go build | Compile all binaries |
+| **Release** | GitHub Releases | Cross-platform binaries (Linux/macOS, amd64/arm64) |
+
+### Running Locally
+
+```bash
+# Format code
+go fmt ./...
+
+# Run linter
+golangci-lint run
+
+# Run tests with coverage
+go test -v -race -coverprofile=coverage.out ./...
+go tool cover -func=coverage.out
+
+# Security scan
+gosec ./...
+govulncheck ./...
+
+# Build
+go build -v ./cmd/...
+```
+
+### Release Process
+
+Releases are triggered automatically when a version tag is pushed:
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+This creates a GitHub Release with pre-built binaries for:
+- Linux (amd64, arm64)
+- macOS (amd64, arm64)
+
+---
+
 ## Running Tests
 
 ```bash
@@ -238,6 +333,7 @@ go test ./pkg/gitops/... -v
 
 ## Pending Work
 
+- [x] CI/CD pipeline with lint, test, security, build, release
 - [ ] Stress tests (10k workloads, 1M samples)
 - [ ] Prometheus metrics integration
 - [ ] Webhook notifications (Slack, PagerDuty)
@@ -254,3 +350,51 @@ go test ./pkg/gitops/... -v
 - **Policy Engine**: expr-lang/expr for expression evaluation
 - **Testing**: Go testing, table-driven tests, CSV test data
 - **GitOps**: Kustomize patches, Helm values generation
+- **CI/CD**: GitHub Actions, golangci-lint, gosec, govulncheck, Codecov
+
+---
+
+## Contributing
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Ensure code passes all checks:
+   ```bash
+   go fmt ./...
+   golangci-lint run
+   go test -race ./...
+   gosec ./...
+   ```
+4. Commit your changes using conventional commits (`git commit -m 'feat: add amazing feature'`)
+5. Push to the branch (`git push origin feature/amazing-feature`)
+6. Open a Pull Request
+
+### Commit Message Format
+
+We use conventional commits:
+- `feat:` - New feature
+- `fix:` - Bug fix
+- `docs:` - Documentation changes
+- `test:` - Adding or updating tests
+- `refactor:` - Code refactoring
+- `ci:` - CI/CD changes
+- `chore:` - Maintenance tasks
+
+---
+
+## Security
+
+See [SECURITY.md](SECURITY.md) for security policy and vulnerability reporting.
+
+---
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---
+
+## Authors
+
+- **Azra Karakaya** - ML/Analytics (Pareto optimization, Holt-Winters prediction, anomaly detection)
+- **Erva Şengül** - Infrastructure (SLA monitoring, GitOps, policy engine, controller)
