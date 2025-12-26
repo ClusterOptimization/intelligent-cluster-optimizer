@@ -161,11 +161,11 @@ func NewDetector() *Detector {
 	return &Detector{
 		MinSamples:           20,
 		MinDuration:          1 * time.Hour,
-		SlopeThreshold:       1024 * 1024,     // 1 MB/hour
-		ResetThreshold:       0.15,            // 15% drop = reset
-		MaxResets:            2,               // Max 2 resets to still consider leak
-		ConsistencyThreshold: 0.7,             // R² >= 0.7 for consistent trend
-		GrowthRateThreshold:  0.1,             // 10% growth minimum
+		SlopeThreshold:       1024 * 1024, // 1 MB/hour
+		ResetThreshold:       0.15,        // 15% drop = reset
+		MaxResets:            2,           // Max 2 resets to still consider leak
+		ConsistencyThreshold: 0.7,         // R² >= 0.7 for consistent trend
+		GrowthRateThreshold:  0.1,         // 10% growth minimum
 	}
 }
 

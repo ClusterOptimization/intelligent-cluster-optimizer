@@ -44,14 +44,14 @@ type ContainerOOMInfo struct {
 
 // OOMCheckResult contains the result of checking a workload for OOM events
 type OOMCheckResult struct {
-	HasOOMHistory     bool
-	WorkloadName      string
-	Namespace         string
+	HasOOMHistory      bool
+	WorkloadName       string
+	Namespace          string
 	AffectedContainers []ContainerOOMInfo
-	TotalOOMCount     int
-	LastOOMTime       time.Time
-	Priority          OOMPriority
-	RecommendedAction string
+	TotalOOMCount      int
+	LastOOMTime        time.Time
+	Priority           OOMPriority
+	RecommendedAction  string
 }
 
 // OOMPriority indicates how urgently a workload needs memory optimization

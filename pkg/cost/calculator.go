@@ -42,14 +42,14 @@ var DefaultPricingModels = map[string]*PricingModel{
 	"aws-us-east-1": {
 		Provider:        "aws",
 		Region:          "us-east-1",
-		CPUPerCoreHour:  0.0416,  // ~$30/month per core
-		MemoryPerGBHour: 0.0052,  // ~$3.75/month per GB
+		CPUPerCoreHour:  0.0416, // ~$30/month per core
+		MemoryPerGBHour: 0.0052, // ~$3.75/month per GB
 		Tier:            TierOnDemand,
 	},
 	"aws-us-east-1-spot": {
 		Provider:        "aws",
 		Region:          "us-east-1",
-		CPUPerCoreHour:  0.0125,  // ~70% discount
+		CPUPerCoreHour:  0.0125, // ~70% discount
 		MemoryPerGBHour: 0.0016,
 		Tier:            TierSpot,
 	},
@@ -70,7 +70,7 @@ var DefaultPricingModels = map[string]*PricingModel{
 	"default": {
 		Provider:        "generic",
 		Region:          "default",
-		CPUPerCoreHour:  0.040,   // Conservative estimate
+		CPUPerCoreHour:  0.040, // Conservative estimate
 		MemoryPerGBHour: 0.005,
 		Tier:            TierOnDemand,
 	},
@@ -138,12 +138,12 @@ type SavingsEstimate struct {
 
 // ContainerSavings represents savings for a single container
 type ContainerSavings struct {
-	ContainerName   string
-	Namespace       string
-	WorkloadName    string
-	Savings         SavingsEstimate
-	ReplicaCount    int32
-	TotalSavings    SavingsEstimate // Savings * ReplicaCount
+	ContainerName string
+	Namespace     string
+	WorkloadName  string
+	Savings       SavingsEstimate
+	ReplicaCount  int32
+	TotalSavings  SavingsEstimate // Savings * ReplicaCount
 }
 
 // WorkloadSavings represents total savings for a workload

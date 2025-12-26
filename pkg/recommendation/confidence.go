@@ -12,17 +12,17 @@ type ConfidenceScore struct {
 	Score float64
 
 	// Individual factor scores (0-100 each)
-	DataDurationScore   float64 // Based on hours of historical data
-	SampleCountScore    float64 // Based on number of metric samples
+	DataDurationScore    float64 // Based on hours of historical data
+	SampleCountScore     float64 // Based on number of metric samples
 	DataConsistencyScore float64 // Based on variance/stability of metrics
-	RecencyScore        float64 // Based on how recent the data is
-	CoverageScore       float64 // Based on time coverage (gaps in data)
+	RecencyScore         float64 // Based on how recent the data is
+	CoverageScore        float64 // Based on time coverage (gaps in data)
 
 	// Raw metrics used for scoring
-	DataDurationHours float64
-	SampleCount       int
-	OldestSampleAge   time.Duration
-	NewestSampleAge   time.Duration
+	DataDurationHours      float64
+	SampleCount            int
+	OldestSampleAge        time.Duration
+	NewestSampleAge        time.Duration
 	CoefficientOfVariation float64 // Standard deviation / mean
 
 	// Human-readable assessment
@@ -35,11 +35,11 @@ type ConfidenceScore struct {
 type ConfidenceLevel string
 
 const (
-	ConfidenceLevelVeryLow  ConfidenceLevel = "VeryLow"   // 0-20%
-	ConfidenceLevelLow      ConfidenceLevel = "Low"       // 20-40%
-	ConfidenceLevelMedium   ConfidenceLevel = "Medium"    // 40-60%
-	ConfidenceLevelHigh     ConfidenceLevel = "High"      // 60-80%
-	ConfidenceLevelVeryHigh ConfidenceLevel = "VeryHigh"  // 80-100%
+	ConfidenceLevelVeryLow  ConfidenceLevel = "VeryLow"  // 0-20%
+	ConfidenceLevelLow      ConfidenceLevel = "Low"      // 20-40%
+	ConfidenceLevelMedium   ConfidenceLevel = "Medium"   // 40-60%
+	ConfidenceLevelHigh     ConfidenceLevel = "High"     // 60-80%
+	ConfidenceLevelVeryHigh ConfidenceLevel = "VeryHigh" // 80-100%
 )
 
 // ConfidenceConfig contains thresholds for confidence calculation
@@ -63,11 +63,11 @@ type ConfidenceConfig struct {
 	MaxAcceptableRecency time.Duration
 
 	// Weights for combining scores (should sum to 1.0)
-	WeightDataDuration   float64
-	WeightSampleCount    float64
+	WeightDataDuration    float64
+	WeightSampleCount     float64
 	WeightDataConsistency float64
-	WeightRecency        float64
-	WeightCoverage       float64
+	WeightRecency         float64
+	WeightCoverage        float64
 }
 
 // DefaultConfidenceConfig returns sensible default thresholds
@@ -81,11 +81,11 @@ func DefaultConfidenceConfig() ConfidenceConfig {
 		MaxAcceptableRecency: 1 * time.Hour,
 
 		// Weights (sum to 1.0)
-		WeightDataDuration:   0.25,
-		WeightSampleCount:    0.25,
+		WeightDataDuration:    0.25,
+		WeightSampleCount:     0.25,
 		WeightDataConsistency: 0.20,
-		WeightRecency:        0.15,
-		WeightCoverage:       0.15,
+		WeightRecency:         0.15,
+		WeightCoverage:        0.15,
 	}
 }
 
@@ -110,15 +110,15 @@ func NewConfidenceCalculatorWithConfig(config ConfidenceConfig) *ConfidenceCalcu
 
 // MetricsSummary contains summary statistics for confidence calculation
 type MetricsSummary struct {
-	SampleCount    int
-	OldestSample   time.Time
-	NewestSample   time.Time
-	Mean           float64
-	StdDev         float64
-	Min            int64
-	Max            int64
-	TimeGaps       []time.Duration // Gaps larger than expected interval
-	ExpectedInterval time.Duration  // Expected time between samples
+	SampleCount      int
+	OldestSample     time.Time
+	NewestSample     time.Time
+	Mean             float64
+	StdDev           float64
+	Min              int64
+	Max              int64
+	TimeGaps         []time.Duration // Gaps larger than expected interval
+	ExpectedInterval time.Duration   // Expected time between samples
 }
 
 // CalculateConfidence computes a detailed confidence score

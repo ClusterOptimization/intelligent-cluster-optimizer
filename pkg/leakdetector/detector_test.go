@@ -189,8 +189,8 @@ func TestDetectorSeverityClassification(t *testing.T) {
 func TestDetectorSlowLeak(t *testing.T) {
 	detector := NewDetector()
 	detector.MinSamples = 10
-	detector.SlopeThreshold = 1 * MB     // 1 MB/hour threshold
-	detector.GrowthRateThreshold = 0.05  // 5% growth threshold (lowered)
+	detector.SlopeThreshold = 1 * MB    // 1 MB/hour threshold
+	detector.GrowthRateThreshold = 0.05 // 5% growth threshold (lowered)
 
 	// Create a slow leak - 8 MB/hour over 6 hours from 500MB = ~9.6% growth
 	start := time.Now()
@@ -404,10 +404,10 @@ func TestDetectorAlert(t *testing.T) {
 
 func TestShouldPreventScaling(t *testing.T) {
 	tests := []struct {
-		name           string
-		isLeak         bool
-		severity       LeakSeverity
-		shouldPrevent  bool
+		name          string
+		isLeak        bool
+		severity      LeakSeverity
+		shouldPrevent bool
 	}{
 		{"no leak", false, SeverityNone, false},
 		{"low severity leak", true, SeverityLow, false},

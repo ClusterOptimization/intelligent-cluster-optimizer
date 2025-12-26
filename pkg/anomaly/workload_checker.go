@@ -21,13 +21,13 @@ type WorkloadAnomalyResult struct {
 	HasMemoryAnomaly bool
 
 	// Combined assessment
-	HasAnyAnomaly       bool
-	HighestSeverity     Severity
-	ShouldBlockScaling  bool
-	BlockReason         string
-	RecommendedAction   string
-	AnomalyCount        int
-	HighSeverityCount   int
+	HasAnyAnomaly      bool
+	HighestSeverity    Severity
+	ShouldBlockScaling bool
+	BlockReason        string
+	RecommendedAction  string
+	AnomalyCount       int
+	HighSeverityCount  int
 }
 
 // Summary returns a human-readable summary of the anomaly check

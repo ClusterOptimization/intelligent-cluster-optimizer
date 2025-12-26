@@ -220,11 +220,11 @@ func TestResolverSpecOverridesProfile(t *testing.T) {
 
 func TestShouldApplyRecommendation(t *testing.T) {
 	tests := []struct {
-		name          string
-		settings      ResolvedSettings
-		confidence    float64
-		changePercent float64
-		shouldApply   bool
+		name           string
+		settings       ResolvedSettings
+		confidence     float64
+		changePercent  float64
+		shouldApply    bool
 		expectedReason string
 	}{
 		{
@@ -233,9 +233,9 @@ func TestShouldApplyRecommendation(t *testing.T) {
 				DryRun:        true,
 				MinConfidence: 50,
 			},
-			confidence:    80,
-			changePercent: 10,
-			shouldApply:   false,
+			confidence:     80,
+			changePercent:  10,
+			shouldApply:    false,
 			expectedReason: "dry-run",
 		},
 		{
@@ -244,9 +244,9 @@ func TestShouldApplyRecommendation(t *testing.T) {
 				DryRun:        false,
 				MinConfidence: 70,
 			},
-			confidence:    60,
-			changePercent: 10,
-			shouldApply:   false,
+			confidence:     60,
+			changePercent:  10,
+			shouldApply:    false,
 			expectedReason: "confidence",
 		},
 		{
@@ -256,9 +256,9 @@ func TestShouldApplyRecommendation(t *testing.T) {
 				MinConfidence:    50,
 				MaxChangePercent: 20,
 			},
-			confidence:    80,
-			changePercent: 30,
-			shouldApply:   false,
+			confidence:     80,
+			changePercent:  30,
+			shouldApply:    false,
 			expectedReason: "change",
 		},
 		{
@@ -268,9 +268,9 @@ func TestShouldApplyRecommendation(t *testing.T) {
 				MinConfidence:   50,
 				RequireApproval: true,
 			},
-			confidence:    80,
-			changePercent: 10,
-			shouldApply:   false,
+			confidence:     80,
+			changePercent:  10,
+			shouldApply:    false,
 			expectedReason: "approval",
 		},
 		{

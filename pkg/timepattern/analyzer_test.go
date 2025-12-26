@@ -263,7 +263,7 @@ func TestHourlyStats(t *testing.T) {
 		{Timestamp: baseTime, CPU: 100, Memory: 1024},
 		{Timestamp: baseTime.Add(10 * time.Minute), CPU: 150, Memory: 1024},
 		{Timestamp: baseTime.Add(20 * time.Minute), CPU: 200, Memory: 1024},
-		{Timestamp: baseTime.Add(1 * time.Hour), CPU: 50, Memory: 512},   // 10 AM
+		{Timestamp: baseTime.Add(1 * time.Hour), CPU: 50, Memory: 512},    // 10 AM
 		{Timestamp: baseTime.Add(70 * time.Minute), CPU: 60, Memory: 512}, // 10 AM
 		{Timestamp: baseTime.Add(80 * time.Minute), CPU: 70, Memory: 512}, // 10 AM
 	}
@@ -407,9 +407,9 @@ func TestFormatPatternSummary(t *testing.T) {
 
 func TestAnalyzerCustomThresholds(t *testing.T) {
 	analyzer := NewAnalyzer()
-	analyzer.PeakThresholdRatio = 1.5      // 50% above average for peak
-	analyzer.OffPeakThresholdRatio = 0.5   // 50% below average for off-peak
-	analyzer.SignificantVariationCV = 0.3  // Higher threshold
+	analyzer.PeakThresholdRatio = 1.5     // 50% above average for peak
+	analyzer.OffPeakThresholdRatio = 0.5  // 50% below average for off-peak
+	analyzer.SignificantVariationCV = 0.3 // Higher threshold
 
 	baseTime := time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC)
 

@@ -36,14 +36,14 @@ type WorkloadMetrics struct {
 	CurrentMemory int64 // bytes
 
 	// Usage statistics
-	AvgCPU  int64
-	AvgMemory int64
-	PeakCPU   int64
+	AvgCPU     int64
+	AvgMemory  int64
+	PeakCPU    int64
 	PeakMemory int64
-	P95CPU    int64
-	P95Memory int64
-	P99CPU    int64
-	P99Memory int64
+	P95CPU     int64
+	P95Memory  int64
+	P99CPU     int64
+	P99Memory  int64
 
 	// Metadata
 	Confidence  float64

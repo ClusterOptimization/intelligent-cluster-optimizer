@@ -29,7 +29,7 @@ func TestSolution_AddObjective(t *testing.T) {
 
 func TestSolution_SetCostObjective(t *testing.T) {
 	sol := NewSolution("test", "default", "app")
-	sol.CPURequest = 1000  // 1 core
+	sol.CPURequest = 1000                  // 1 core
 	sol.MemoryRequest = 1024 * 1024 * 1024 // 1 GB
 
 	sol.SetCostObjective(0.05, 0.01, 0.25)
@@ -50,7 +50,7 @@ func TestSolution_SetCostObjective(t *testing.T) {
 func TestSolution_Dominates(t *testing.T) {
 	// Solution A: better cost, worse performance
 	solA := NewSolution("a", "default", "app")
-	solA.AddObjective(ObjectiveCost, "Cost", 5.0, 0.5, true)        // Lower is better
+	solA.AddObjective(ObjectiveCost, "Cost", 5.0, 0.5, true)          // Lower is better
 	solA.AddObjective(ObjectivePerformance, "Perf", 60.0, 0.5, false) // Higher is better
 
 	// Solution B: worse cost, better performance
@@ -139,9 +139,9 @@ func TestOptimizer_Optimize_WithDomination(t *testing.T) {
 
 	// Create solutions where one dominates another
 	solutions := []*Solution{
-		createTestSolution("dominated", 10.0, 60.0),   // Worse in both
-		createTestSolution("dominant", 5.0, 90.0),     // Better in both
-		createTestSolution("alternative", 7.0, 70.0),  // Trade-off with dominant
+		createTestSolution("dominated", 10.0, 60.0),  // Worse in both
+		createTestSolution("dominant", 5.0, 90.0),    // Better in both
+		createTestSolution("alternative", 7.0, 70.0), // Trade-off with dominant
 	}
 
 	result := opt.Optimize(solutions)
@@ -170,11 +170,11 @@ func TestOptimizer_GenerateSolutionSet(t *testing.T) {
 	solutions := opt.GenerateSolutionSet(
 		"default", "myapp",
 		1000, 1024*1024*1024, // current
-		500, 512*1024*1024,   // avg
-		800, 768*1024*1024,   // peak
-		700, 700*1024*1024,   // p95
-		900, 900*1024*1024,   // p99
-		85.0,                  // confidence
+		500, 512*1024*1024, // avg
+		800, 768*1024*1024, // peak
+		700, 700*1024*1024, // p95
+		900, 900*1024*1024, // p99
+		85.0, // confidence
 	)
 
 	// Should generate 6 strategies

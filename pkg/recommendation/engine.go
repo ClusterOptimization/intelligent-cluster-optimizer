@@ -86,10 +86,10 @@ type ContainerRecommendation struct {
 	EstimatedSavings *cost.SavingsEstimate
 
 	// OOM information
-	HasOOMHistory    bool
-	OOMCount         int
-	OOMBoostApplied  float64 // Memory boost multiplier applied due to OOM history
-	OOMPriority      string  // Priority level based on OOM frequency
+	HasOOMHistory   bool
+	OOMCount        int
+	OOMBoostApplied float64 // Memory boost multiplier applied due to OOM history
+	OOMPriority     string  // Priority level based on OOM frequency
 }
 
 // CalculateCPUChangePercent returns the percentage change in CPU from current to recommended.
@@ -683,21 +683,21 @@ func (e *Engine) generateContainerRecommendationWithOOM(
 		confidence, savings.TotalSavingsPerHour, oomLogSuffix)
 
 	return &ContainerRecommendation{
-		ContainerName:       containerName,
-		CurrentCPU:          currentCPU,
-		CurrentMemory:       currentMemory,
-		RecommendedCPU:      recommendedCPU,
-		RecommendedMemory:   recommendedMemory,
-		SampleCount:         len(samples),
-		CPUPercentile:       cpuPercentile,
-		MemoryPercentile:    memoryPercentile,
-		Confidence:          confidence,
-		ConfidenceDetails:   &confidenceDetails,
-		EstimatedSavings:    &savings,
-		HasOOMHistory:       hasOOMHistory,
-		OOMCount:            oomCount,
-		OOMBoostApplied:     oomBoostApplied,
-		OOMPriority:         oomPriority,
+		ContainerName:     containerName,
+		CurrentCPU:        currentCPU,
+		CurrentMemory:     currentMemory,
+		RecommendedCPU:    recommendedCPU,
+		RecommendedMemory: recommendedMemory,
+		SampleCount:       len(samples),
+		CPUPercentile:     cpuPercentile,
+		MemoryPercentile:  memoryPercentile,
+		Confidence:        confidence,
+		ConfidenceDetails: &confidenceDetails,
+		EstimatedSavings:  &savings,
+		HasOOMHistory:     hasOOMHistory,
+		OOMCount:          oomCount,
+		OOMBoostApplied:   oomBoostApplied,
+		OOMPriority:       oomPriority,
 	}
 }
 

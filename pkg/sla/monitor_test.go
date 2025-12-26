@@ -101,7 +101,7 @@ func TestMonitor_CheckLatencySLA(t *testing.T) {
 		{Timestamp: now.Add(-3 * time.Minute), Value: 90.0},
 		{Timestamp: now.Add(-2 * time.Minute), Value: 120.0},
 		{Timestamp: now.Add(-1 * time.Minute), Value: 160.0}, // Violation (> 150)
-		{Timestamp: now, Value: 170.0},                        // Violation (> 150)
+		{Timestamp: now, Value: 170.0},                       // Violation (> 150)
 	}
 
 	violations, err := monitor.CheckSLA("latency-sla", metrics)
@@ -138,7 +138,7 @@ func TestMonitor_CheckErrorRateSLA(t *testing.T) {
 		{Timestamp: now.Add(-3 * time.Minute), Value: 0.2},
 		{Timestamp: now.Add(-2 * time.Minute), Value: 0.3},
 		{Timestamp: now.Add(-1 * time.Minute), Value: 0.6}, // Above threshold
-		{Timestamp: now, Value: 0.7},                        // Above threshold
+		{Timestamp: now, Value: 0.7},                       // Above threshold
 	}
 
 	violations, err := monitor.CheckSLA("error-rate-sla", metrics)
@@ -274,7 +274,7 @@ func TestMonitor_WindowFiltering(t *testing.T) {
 		{Timestamp: now.Add(-10 * time.Minute), Value: 200.0}, // Outside window
 		{Timestamp: now.Add(-5 * time.Minute), Value: 200.0},  // Outside window
 		{Timestamp: now.Add(-1 * time.Minute), Value: 200.0},  // Inside window
-		{Timestamp: now, Value: 200.0},                         // Inside window
+		{Timestamp: now, Value: 200.0},                        // Inside window
 	}
 
 	violations, err := monitor.CheckSLA("test-window", metrics)

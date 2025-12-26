@@ -130,11 +130,11 @@ func TestGenerateStrategicMerge(t *testing.T) {
 		{
 			name: "zero memory",
 			rec: ResourceRecommendation{
-				Namespace:      "production",
-				Name:           "api-server",
-				Kind:           "Deployment",
-				ContainerName:  "api",
-				RecommendedCPU: 500,
+				Namespace:         "production",
+				Name:              "api-server",
+				Kind:              "Deployment",
+				ContainerName:     "api",
+				RecommendedCPU:    500,
 				RecommendedMemory: 0,
 			},
 			wantErr: true,

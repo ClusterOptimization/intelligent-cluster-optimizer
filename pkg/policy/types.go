@@ -125,12 +125,12 @@ type RecommendationInfo struct {
 // ToExprEnv converts RecommendationInfo to a map for expr evaluation
 func (r RecommendationInfo) ToExprEnv() map[string]interface{} {
 	return map[string]interface{}{
-		"recommendedCPU":       r.RecommendedCPU,
-		"recommendedMemory":    r.RecommendedMemory,
-		"confidence":           r.Confidence,
-		"changeType":           r.ChangeType,
-		"cpuChangePercent":     r.CPUChangePercent,
-		"memoryChangePercent":  r.MemoryChangePercent,
+		"recommendedCPU":      r.RecommendedCPU,
+		"recommendedMemory":   r.RecommendedMemory,
+		"confidence":          r.Confidence,
+		"changeType":          r.ChangeType,
+		"cpuChangePercent":    r.CPUChangePercent,
+		"memoryChangePercent": r.MemoryChangePercent,
 	}
 }
 
@@ -217,14 +217,14 @@ type ModifiedRecommendation struct {
 
 // ActionType constants for common policy actions
 const (
-	ActionAllow          = "allow"
-	ActionDeny           = "deny"
-	ActionSkip           = "skip"
-	ActionSkipScaleDown  = "skip-scaledown"
-	ActionSkipScaleUp    = "skip-scaleup"
-	ActionSetMinCPU      = "set-min-cpu"
-	ActionSetMaxCPU      = "set-max-cpu"
-	ActionSetMinMemory   = "set-min-memory"
-	ActionSetMaxMemory   = "set-max-memory"
+	ActionAllow           = "allow"
+	ActionDeny            = "deny"
+	ActionSkip            = "skip"
+	ActionSkipScaleDown   = "skip-scaledown"
+	ActionSkipScaleUp     = "skip-scaleup"
+	ActionSetMinCPU       = "set-min-cpu"
+	ActionSetMaxCPU       = "set-max-cpu"
+	ActionSetMinMemory    = "set-min-memory"
+	ActionSetMaxMemory    = "set-max-memory"
 	ActionRequireApproval = "require-approval"
 )

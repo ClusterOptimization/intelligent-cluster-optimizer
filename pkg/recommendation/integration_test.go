@@ -241,10 +241,10 @@ func TestIntegration_StableUsage(t *testing.T) {
 	rec := engine.generateContainerRecommendation(
 		"test-container",
 		containerSamples,
-		95, // CPU percentile
-		95, // Memory percentile
+		95,  // CPU percentile
+		95,  // Memory percentile
 		1.2, // Safety margin
-		10, // Min samples
+		10,  // Min samples
 		nil,
 	)
 
@@ -545,12 +545,12 @@ func TestIntegration_EndToEnd(t *testing.T) {
 
 	testdataDir := "testdata"
 	scenarios := []struct {
-		file               string
-		expectLeak         bool
-		expectScaleDown    bool
-		expectTimePattern  bool
-		expectScaleUp      bool
-		description        string
+		file              string
+		expectLeak        bool
+		expectScaleDown   bool
+		expectTimePattern bool
+		expectScaleUp     bool
+		description       string
 	}{
 		{
 			file:            "memory_leak.csv",

@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	optimizerv1alpha1 "intelligent-cluster-optimizer/pkg/apis/optimizer/v1alpha1"
 	"intelligent-cluster-optimizer/pkg/anomaly"
+	optimizerv1alpha1 "intelligent-cluster-optimizer/pkg/apis/optimizer/v1alpha1"
 	"intelligent-cluster-optimizer/pkg/applier"
 	"intelligent-cluster-optimizer/pkg/events"
 	"intelligent-cluster-optimizer/pkg/gitops"
@@ -461,7 +461,7 @@ func (r *Reconciler) processRecommendations(ctx context.Context, config *optimiz
 				WorkloadName:  workloadRec.WorkloadName,
 				CurrentCPU:    c.CurrentCPU,
 				CurrentMemory: c.CurrentMemory,
-				AvgCPU:        c.RecommendedCPU,   // Using recommended as proxy for avg
+				AvgCPU:        c.RecommendedCPU, // Using recommended as proxy for avg
 				AvgMemory:     c.RecommendedMemory,
 				PeakCPU:       int64(float64(c.RecommendedCPU) * 1.2),
 				PeakMemory:    int64(float64(c.RecommendedMemory) * 1.2),

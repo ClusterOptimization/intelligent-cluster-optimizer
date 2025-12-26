@@ -211,10 +211,10 @@ func (d *ConsensusDetector) GetIndividualResults(data []float64, timestamps []ti
 type AgreementLevel int
 
 const (
-	AgreementNone     AgreementLevel = 0
-	AgreementSingle   AgreementLevel = 1
-	AgreementDouble   AgreementLevel = 2
-	AgreementTriple   AgreementLevel = 3
+	AgreementNone      AgreementLevel = 0
+	AgreementSingle    AgreementLevel = 1
+	AgreementDouble    AgreementLevel = 2
+	AgreementTriple    AgreementLevel = 3
 	AgreementUnanimous AgreementLevel = -1 // All methods agree
 )
 

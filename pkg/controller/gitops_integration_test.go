@@ -26,15 +26,15 @@ func TestGitOpsIntegration_KustomizeExport(t *testing.T) {
 	// Populate metrics storage with sample data
 	metrics := []models.PodMetric{
 		{
-			Namespace:  "production",
-			PodName:    "api-server-abc123",
-			Timestamp:  metav1.Now().Time,
+			Namespace: "production",
+			PodName:   "api-server-abc123",
+			Timestamp: metav1.Now().Time,
 			Containers: []models.ContainerMetric{
 				{
 					ContainerName: "api",
-					UsageCPU:      400,  // 400m
-					UsageMemory:   400 * 1024 * 1024, // 400Mi
-					RequestCPU:    1000, // 1000m (current request)
+					UsageCPU:      400,                // 400m
+					UsageMemory:   400 * 1024 * 1024,  // 400Mi
+					RequestCPU:    1000,               // 1000m (current request)
 					RequestMemory: 1024 * 1024 * 1024, // 1Gi (current request)
 				},
 			},
@@ -53,13 +53,13 @@ func TestGitOpsIntegration_KustomizeExport(t *testing.T) {
 			Namespace: "default",
 		},
 		Spec: optimizerv1alpha1.OptimizerConfigSpec{
-			Enabled: true,
+			Enabled:          true,
 			TargetNamespaces: []string{"production"},
-			Strategy: optimizerv1alpha1.StrategyBalanced,
-			DryRun: true, // Use dry-run to test export without applying changes
+			Strategy:         optimizerv1alpha1.StrategyBalanced,
+			DryRun:           true, // Use dry-run to test export without applying changes
 			GitOpsExport: &optimizerv1alpha1.GitOpsExportConfig{
-				Enabled: true,
-				Format: optimizerv1alpha1.GitOpsFormatKustomize,
+				Enabled:    true,
+				Format:     optimizerv1alpha1.GitOpsFormatKustomize,
 				OutputPath: tmpDir,
 			},
 			Recommendations: &optimizerv1alpha1.RecommendationConfig{
@@ -166,9 +166,9 @@ func TestGitOpsIntegration_HelmExport(t *testing.T) {
 			Containers: []models.ContainerMetric{
 				{
 					ContainerName: "postgres",
-					UsageCPU:      1800, // 1.8 cores
+					UsageCPU:      1800,                   // 1.8 cores
 					UsageMemory:   3 * 1024 * 1024 * 1024, // 3Gi
-					RequestCPU:    2000, // 2 cores
+					RequestCPU:    2000,                   // 2 cores
 					RequestMemory: 4 * 1024 * 1024 * 1024, // 4Gi
 				},
 			},
@@ -185,13 +185,13 @@ func TestGitOpsIntegration_HelmExport(t *testing.T) {
 			Namespace: "default",
 		},
 		Spec: optimizerv1alpha1.OptimizerConfigSpec{
-			Enabled: true,
+			Enabled:          true,
 			TargetNamespaces: []string{"production"},
-			Strategy: optimizerv1alpha1.StrategyBalanced,
-			DryRun: true,
+			Strategy:         optimizerv1alpha1.StrategyBalanced,
+			DryRun:           true,
 			GitOpsExport: &optimizerv1alpha1.GitOpsExportConfig{
-				Enabled: true,
-				Format: optimizerv1alpha1.GitOpsFormatHelm,
+				Enabled:    true,
+				Format:     optimizerv1alpha1.GitOpsFormatHelm,
 				OutputPath: tmpDir,
 			},
 			Recommendations: &optimizerv1alpha1.RecommendationConfig{
@@ -254,11 +254,11 @@ func TestGitOpsIntegration_DisabledExport(t *testing.T) {
 			Namespace: "default",
 		},
 		Spec: optimizerv1alpha1.OptimizerConfigSpec{
-			Enabled: true,
+			Enabled:          true,
 			TargetNamespaces: []string{"production"},
-			DryRun: true,
+			DryRun:           true,
 			GitOpsExport: &optimizerv1alpha1.GitOpsExportConfig{
-				Enabled: false, // Disabled
+				Enabled:    false, // Disabled
 				OutputPath: tmpDir,
 			},
 		},

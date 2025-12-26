@@ -28,8 +28,8 @@ const (
 
 // Solution represents a candidate solution with multiple objectives
 type Solution struct {
-	ID          string
-	Namespace   string
+	ID           string
+	Namespace    string
 	WorkloadName string
 
 	// Resource recommendations

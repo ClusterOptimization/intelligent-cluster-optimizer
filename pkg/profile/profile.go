@@ -81,12 +81,12 @@ type ProfileSettings struct {
 	DryRunByDefault bool
 
 	// MinResourceLimits defines minimum resource values
-	MinCPUMillicores    int64
-	MinMemoryMegabytes  int64
+	MinCPUMillicores   int64
+	MinMemoryMegabytes int64
 
 	// MaxResourceLimits defines maximum resource values
-	MaxCPUMillicores    int64
-	MaxMemoryMegabytes  int64
+	MaxCPUMillicores   int64
+	MaxMemoryMegabytes int64
 }
 
 // ProfileManager manages environment profiles
@@ -165,10 +165,10 @@ func ProductionProfile() *Profile {
 
 			DryRunByDefault: true, // Start in dry-run
 
-			MinCPUMillicores:   100,           // 100m minimum
-			MinMemoryMegabytes: 128,           // 128Mi minimum
-			MaxCPUMillicores:   16000,         // 16 cores max
-			MaxMemoryMegabytes: 64 * 1024,     // 64Gi max
+			MinCPUMillicores:   100,       // 100m minimum
+			MinMemoryMegabytes: 128,       // 128Mi minimum
+			MaxCPUMillicores:   16000,     // 16 cores max
+			MaxMemoryMegabytes: 64 * 1024, // 64Gi max
 		},
 	}
 }
@@ -197,10 +197,10 @@ func StagingProfile() *Profile {
 
 			DryRunByDefault: false,
 
-			MinCPUMillicores:   50,            // 50m minimum
-			MinMemoryMegabytes: 64,            // 64Mi minimum
-			MaxCPUMillicores:   8000,          // 8 cores max
-			MaxMemoryMegabytes: 32 * 1024,     // 32Gi max
+			MinCPUMillicores:   50,        // 50m minimum
+			MinMemoryMegabytes: 64,        // 64Mi minimum
+			MaxCPUMillicores:   8000,      // 8 cores max
+			MaxMemoryMegabytes: 32 * 1024, // 32Gi max
 		},
 	}
 }
@@ -229,10 +229,10 @@ func DevelopmentProfile() *Profile {
 
 			DryRunByDefault: false,
 
-			MinCPUMillicores:   10,            // 10m minimum
-			MinMemoryMegabytes: 32,            // 32Mi minimum
-			MaxCPUMillicores:   4000,          // 4 cores max
-			MaxMemoryMegabytes: 16 * 1024,     // 16Gi max
+			MinCPUMillicores:   10,        // 10m minimum
+			MinMemoryMegabytes: 32,        // 32Mi minimum
+			MaxCPUMillicores:   4000,      // 4 cores max
+			MaxMemoryMegabytes: 16 * 1024, // 16Gi max
 		},
 	}
 }
@@ -261,10 +261,10 @@ func TestProfile() *Profile {
 
 			DryRunByDefault: false,
 
-			MinCPUMillicores:   5,             // 5m minimum
-			MinMemoryMegabytes: 16,            // 16Mi minimum
-			MaxCPUMillicores:   2000,          // 2 cores max
-			MaxMemoryMegabytes: 8 * 1024,      // 8Gi max
+			MinCPUMillicores:   5,        // 5m minimum
+			MinMemoryMegabytes: 16,       // 16Mi minimum
+			MaxCPUMillicores:   2000,     // 2 cores max
+			MaxMemoryMegabytes: 8 * 1024, // 8Gi max
 		},
 	}
 }

@@ -111,14 +111,14 @@ type HourStats struct {
 
 // DayStats contains statistics for a specific day of week
 type DayStats struct {
-	Day          time.Weekday
-	SampleCount  int
-	MeanCPU      float64
-	MeanMemory   float64
-	MaxCPU       int64
-	MaxMemory    int64
-	IsPeak       bool
-	IsOffPeak    bool
+	Day         time.Weekday
+	SampleCount int
+	MeanCPU     float64
+	MeanMemory  float64
+	MaxCPU      int64
+	MaxMemory   int64
+	IsPeak      bool
+	IsOffPeak   bool
 }
 
 // OverallStats contains overall usage statistics

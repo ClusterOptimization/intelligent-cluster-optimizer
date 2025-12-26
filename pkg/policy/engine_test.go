@@ -772,10 +772,10 @@ func TestResourceModificationErrors(t *testing.T) {
 	engine := NewEngine()
 
 	tests := []struct {
-		name       string
-		policy     Policy
-		ctx        EvaluationContext
-		wantErr    bool
+		name        string
+		policy      Policy
+		ctx         EvaluationContext
+		wantErr     bool
 		errContains string
 	}{
 		{
@@ -784,7 +784,7 @@ func TestResourceModificationErrors(t *testing.T) {
 				Action:     ActionSetMinCPU,
 				Parameters: map[string]string{},
 			},
-			wantErr:    true,
+			wantErr:     true,
 			errContains: "missing parameter",
 		},
 		{
@@ -795,7 +795,7 @@ func TestResourceModificationErrors(t *testing.T) {
 					"min-cpu": "invalid",
 				},
 			},
-			wantErr:    true,
+			wantErr:     true,
 			errContains: "invalid",
 		},
 		{
@@ -803,7 +803,7 @@ func TestResourceModificationErrors(t *testing.T) {
 			policy: Policy{
 				Action: "unknown-action",
 			},
-			wantErr:    true,
+			wantErr:     true,
 			errContains: "unknown action",
 		},
 	}
@@ -827,10 +827,10 @@ func TestResourceModificationErrors(t *testing.T) {
 
 func TestEvaluationErrors(t *testing.T) {
 	tests := []struct {
-		name                 string
-		policy               string
-		ctx                  EvaluationContext
-		expectPolicySkipped  bool
+		name                  string
+		policy                string
+		ctx                   EvaluationContext
+		expectPolicySkipped   bool
 		expectedDefaultAction string
 	}{
 		{
@@ -843,7 +843,7 @@ policies:
     action: allow
     enabled: true
 `,
-			expectPolicySkipped:  true,
+			expectPolicySkipped:   true,
 			expectedDefaultAction: "deny",
 		},
 		{
@@ -861,7 +861,7 @@ policies:
 					Namespace: "test",
 				},
 			},
-			expectPolicySkipped:  true,
+			expectPolicySkipped:   true,
 			expectedDefaultAction: "allow",
 		},
 	}

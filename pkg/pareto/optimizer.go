@@ -15,8 +15,8 @@ type Optimizer struct {
 	StabilityWeight   float64
 
 	// Cost parameters (per hour)
-	CPUCostPerCore   float64 // Cost per CPU core per hour
-	MemoryCostPerGB  float64 // Cost per GB memory per hour
+	CPUCostPerCore  float64 // Cost per CPU core per hour
+	MemoryCostPerGB float64 // Cost per GB memory per hour
 }
 
 // NewOptimizer creates a new Pareto optimizer with default weights
@@ -388,7 +388,7 @@ func (o *Optimizer) createSolution(
 	sol := NewSolution(strategy, namespace, workloadName)
 	sol.CPURequest = cpuRequest
 	sol.MemoryRequest = memoryRequest
-	sol.CPULimit = int64(float64(cpuRequest) * 1.5)    // Limit = 1.5x request
+	sol.CPULimit = int64(float64(cpuRequest) * 1.5)       // Limit = 1.5x request
 	sol.MemoryLimit = int64(float64(memoryRequest) * 1.2) // Memory limit = 1.2x request
 	sol.Confidence = confidence
 	sol.Source = strategy

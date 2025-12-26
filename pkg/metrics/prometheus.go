@@ -8,13 +8,13 @@ import (
 // PrometheusExporter exposes optimizer metrics to Prometheus
 type PrometheusExporter struct {
 	// Reconciliation metrics
-	ReconciliationTotal   *prometheus.CounterVec
+	ReconciliationTotal    *prometheus.CounterVec
 	ReconciliationDuration *prometheus.HistogramVec
-	ReconciliationErrors  *prometheus.CounterVec
+	ReconciliationErrors   *prometheus.CounterVec
 
 	// Resource recommendation metrics
-	CPURecommendation    *prometheus.GaugeVec
-	MemoryRecommendation *prometheus.GaugeVec
+	CPURecommendation     *prometheus.GaugeVec
+	MemoryRecommendation  *prometheus.GaugeVec
 	ReplicaRecommendation *prometheus.GaugeVec
 
 	// SLA metrics
@@ -24,20 +24,20 @@ type PrometheusExporter struct {
 	RollbacksTriggered  *prometheus.CounterVec
 
 	// Policy metrics
-	PolicyEvaluations     *prometheus.CounterVec
-	PolicyBlockedChanges  *prometheus.CounterVec
+	PolicyEvaluations    *prometheus.CounterVec
+	PolicyBlockedChanges *prometheus.CounterVec
 
 	// GitOps metrics
-	GitOpsExports        *prometheus.CounterVec
-	GitOpsExportErrors   *prometheus.CounterVec
+	GitOpsExports      *prometheus.CounterVec
+	GitOpsExportErrors *prometheus.CounterVec
 
 	// Prediction metrics
-	PredictionsMade      *prometheus.CounterVec
-	PeakLoadsPredicted   *prometheus.CounterVec
+	PredictionsMade    *prometheus.CounterVec
+	PeakLoadsPredicted *prometheus.CounterVec
 
 	// Pareto optimization metrics
-	ParetoFrontSize      *prometheus.GaugeVec
-	ParetoSolutions      *prometheus.CounterVec
+	ParetoFrontSize *prometheus.GaugeVec
+	ParetoSolutions *prometheus.CounterVec
 }
 
 // NewPrometheusExporter creates a new Prometheus metrics exporter

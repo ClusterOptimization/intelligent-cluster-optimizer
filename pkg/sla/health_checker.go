@@ -96,8 +96,8 @@ func (h *DefaultHealthChecker) PreOptimizationCheck(metrics []Metric) (*HealthCh
 		{
 			Name:        "error-rate",
 			Type:        SLATypeErrorRate,
-			Target:      0.1,   // 0.1% target
-			Threshold:   0.4,   // 0.5% max acceptable
+			Target:      0.1, // 0.1% target
+			Threshold:   0.4, // 0.5% max acceptable
 			Window:      5 * time.Minute,
 			Description: "Error rate should be under 0.5%",
 		},
