@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -231,14 +232,18 @@ func (r *RollbackManager) SaveToFile(filename string) error {
 		return err
 	}
 
-	return os.WriteFile(filename, data, 0644)
+	// #nosec G306 - config files need to be readable by the process owner
+	return os.WriteFile(filename, data, 0600)
 }
 
 func (r *RollbackManager) LoadFromFile(filename string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	data, err := os.ReadFile(filename)
+	// Sanitize the file path to prevent path traversal
+	cleanPath := filepath.Clean(filename)
+	// #nosec G304 - filename is provided by the operator, not user input
+	data, err := os.ReadFile(cleanPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil

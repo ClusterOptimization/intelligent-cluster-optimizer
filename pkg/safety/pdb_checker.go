@@ -173,6 +173,7 @@ func (p *PDBChecker) calculateIntOrPercent(value *intstr.IntOrString, total int3
 	}
 
 	percent, _ := intstr.GetScaledValueFromIntOrPercent(value, int(total), true)
+	// #nosec G115 - percent is bounded by the total parameter which is already int32
 	return int32(percent)
 }
 

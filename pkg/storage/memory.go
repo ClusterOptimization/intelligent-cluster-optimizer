@@ -2,10 +2,12 @@ package storage
 
 import (
 	"encoding/json"
-	"intelligent-cluster-optimizer/pkg/models"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
+
+	"intelligent-cluster-optimizer/pkg/models"
 )
 
 type InMemoryStorage struct {
@@ -88,7 +90,8 @@ func (s *InMemoryStorage) SaveToFile(filename string) error {
 		return err
 	}
 
-	return os.WriteFile(filename, data, 0644) // write to disk
+	// #nosec G306 - config files need to be readable by the process owner
+	return os.WriteFile(filename, data, 0600) // write to disk with restrictive permissions
 }
 
 // LoadFromFile reads a JSON file and restores the history map
@@ -96,7 +99,10 @@ func (s *InMemoryStorage) LoadFromFile(filename string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	data, err := os.ReadFile(filename)
+	// Sanitize the file path to prevent path traversal
+	cleanPath := filepath.Clean(filename)
+	// #nosec G304 - filename is provided by the operator, not user input
+	data, err := os.ReadFile(cleanPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil // file not exists

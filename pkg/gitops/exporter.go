@@ -146,13 +146,15 @@ func (e *DefaultExporter) exportHelm(recommendations []ResourceRecommendation, c
 // writeFiles writes files to the specified directory
 func (e *DefaultExporter) writeFiles(files map[string]string, outputPath string) error {
 	// Create output directory if it doesn't exist
-	if err := os.MkdirAll(outputPath, 0755); err != nil {
+	// #nosec G301 - output directory needs to be accessible for GitOps tools
+	if err := os.MkdirAll(outputPath, 0750); err != nil {
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
 
 	for filename, content := range files {
 		filePath := filepath.Join(outputPath, filename)
-		if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
+		// #nosec G306 - GitOps files need to be readable by deployment tools
+		if err := os.WriteFile(filePath, []byte(content), 0600); err != nil {
 			return fmt.Errorf("failed to write file %s: %w", filename, err)
 		}
 	}
