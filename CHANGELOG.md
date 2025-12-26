@@ -7,6 +7,88 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2025-12-27
+
+### Added
+
+#### Policy & Governance
+- Policy engine with expression-based evaluation (expr-lang/expr)
+  - YAML-based policy configuration
+  - Priority-based policy ordering
+  - Actions: allow, deny, skip, skip-scaledown, skip-scaleup, modify, require-approval
+  - Resource limit enforcement (min/max CPU/memory)
+- SLA monitoring and health checking
+  - Latency tracking (P95, P99 percentile-based)
+  - Error rate monitoring
+  - Availability and throughput SLAs
+  - Control chart-based health assessment
+  - Blocks scaling during SLA violations
+
+#### GitOps Integration
+- Kustomize export support
+  - Strategic merge patches
+  - JSON 6902 patches
+  - Auto-generated kustomization.yaml
+- Helm values.yaml generation
+- Git repository integration for PR-based workflows
+
+#### Observability
+- Prometheus metrics exporter
+  - Recommendation metrics (count, confidence, savings)
+  - Workload metrics (CPU/memory usage, requests, limits)
+  - Safety metrics (circuit breaker state, PDB violations)
+  - Operation metrics (apply success/failure, rollback count)
+- Structured logging with zap logger
+  - JSON and console output formats
+  - Configurable log levels
+  - Request tracing support
+
+#### Deployment & Operations
+- Kubernetes deployment manifests with kustomize
+  - Base configuration
+  - Production overlay with resource limits
+  - Development overlay for testing
+- Webhook validator for OptimizerConfig resources
+  - Validates configuration before admission
+  - Prevents invalid CRD configurations
+- Example OptimizerConfig YAMLs
+  - Basic configuration
+  - Production-ready setup
+  - Development/testing configuration
+  - GitOps-enabled configuration
+
+#### CI/CD Pipeline
+- Enhanced GitHub Actions workflow
+  - Lint stage (gofmt, golangci-lint)
+  - Test stage with coverage reporting (Codecov)
+  - Security scanning (gosec, govulncheck)
+  - Multi-platform builds (Linux/macOS, amd64/arm64)
+  - Automated GitHub Releases on version tags
+
+#### Documentation
+- Comprehensive README with architecture diagrams
+- SECURITY.md with vulnerability reporting policy
+- ARCHITECTURE.md with system design details
+- USAGE.md with operational guides
+- Contributing guidelines with conventional commits
+
+### Fixed
+
+#### Security
+- Path traversal vulnerabilities (added filepath.Clean sanitization)
+- File permission issues (0644 -> 0600 for sensitive files)
+- Directory permissions (0755 -> 0750 for output directories)
+- Integer overflow annotations for gosec compliance
+
+#### Code Quality
+- Resolved all golangci-lint issues
+  - Fixed unchecked error returns (errcheck)
+  - Removed unused functions (unused)
+  - Simplified nil checks (gosimple)
+  - Fixed ineffective assignments (ineffassign)
+  - Replaced deprecated wait.PollImmediate (staticcheck)
+- Code formatting compliance (gofmt)
+
 ## [1.0.0] - 2025-12-21
 
 ### Added
@@ -81,6 +163,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ---
 
 ## Release Notes
+
+### v1.1.0 Highlights
+
+**Policy-Driven Optimization**: New policy engine enables fine-grained control over which recommendations are applied. Define rules using expression-based conditions to allow, deny, modify, or require approval for changes.
+
+**SLA-Aware Scaling**: The optimizer now monitors SLA metrics (latency, error rate, availability) and blocks scaling operations during violations to protect service health.
+
+**GitOps Ready**: Export recommendations as Kustomize patches or Helm values for seamless integration with ArgoCD, Flux, or other GitOps workflows.
+
+**Production Observability**: Prometheus metrics exporter and structured logging provide full visibility into optimizer operations, recommendations, and safety events.
+
+**Enterprise CI/CD**: Comprehensive pipeline with linting, testing, security scanning, and automated multi-platform releases ensures code quality and security.
 
 ### v1.0.0 Highlights
 
