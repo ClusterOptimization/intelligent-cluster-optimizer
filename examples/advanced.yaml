@@ -1,0 +1,99 @@
+apiVersion: optimizer.intelligent-cluster-optimizer.io/v1alpha1
+kind: OptimizerConfig
+metadata:
+  name: advanced-optimizer
+  namespace: intelligent-optimizer-system
+  labels:
+    environment: production
+    team: platform
+spec:
+  # Production profile as base
+  profile: production
+
+  # Fine-tune with overrides
+  profileOverrides:
+    minConfidence: 80.0
+    maxChangePercent: 30.0
+    requireApproval: true
+    applyDelay: "12h"
+
+  # Target multiple namespaces
+  targetNamespaces:
+    - production
+    - staging
+    - pre-prod
+
+  # Multiple maintenance windows
+  maintenanceWindows:
+    # Sunday mornings
+    - schedule: "0 2 * * 0"
+      duration: "4h"
+      timezone: "America/New_York"
+    # Wednesday nights (mid-week)
+    - schedule: "0 22 * * 3"
+      duration: "2h"
+      timezone: "America/New_York"
+
+  # Comprehensive resource thresholds
+  resourceThresholds:
+    cpu:
+      min: "50m"
+      max: "16"
+    memory:
+      min: "128Mi"
+      max: "64Gi"
+
+  # Detailed recommendation configuration
+  recommendations:
+    cpuPercentile: 95
+    memoryPercentile: 95
+    safetyMargin: 1.3
+    historyDuration: "14d"  # 2 weeks of history
+    minSamples: 2000
+
+  # Rolling update strategy
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: "10%"
+      maxSurge: "25%"
+
+  # HPA awareness with warning policy
+  hpaAwareness:
+    enabled: true
+    conflictPolicy: Warn
+
+  # PDB awareness enabled
+  pdbAwareness:
+    enabled: true
+    respectMinAvailable: true
+
+  # Circuit breaker configuration
+  circuitBreaker:
+    enabled: true
+    errorThreshold: 5
+    successThreshold: 3
+    timeout: "5m"
+
+  # GitOps export with Helm format
+  gitOpsExport:
+    enabled: true
+    format: helm
+    outputPath: "/var/gitops/helm-values"
+    autoCommit: false  # Manual commit workflow
+
+  # Target all workload types
+  targetResources:
+    - deployments
+    - statefulsets
+    - daemonsets
+
+  # Exclude system and monitoring workloads
+  excludeWorkloads:
+    - "^kube-.*"
+    - "^coredns.*"
+    - "^metrics-server.*"
+    - "^prometheus.*"
+    - "^grafana.*"
+    - ".*-monitoring$"
+    - ".*-logging$"

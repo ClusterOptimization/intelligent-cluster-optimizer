@@ -1,0 +1,64 @@
+apiVersion: optimizer.intelligent-cluster-optimizer.io/v1alpha1
+kind: OptimizerConfig
+metadata:
+  name: production-optimizer
+  namespace: intelligent-optimizer-system
+spec:
+  # Production profile with conservative settings
+  profile: production
+
+  # Override some profile defaults
+  profileOverrides:
+    minConfidence: 85.0
+    requireApproval: true
+    applyDelay: "24h"
+
+  # Target namespaces
+  targetNamespaces:
+    - production
+    - staging
+
+  # Apply changes only during maintenance windows
+  maintenanceWindows:
+    - schedule: "0 2 * * 0"  # 2 AM every Sunday
+      duration: "4h"
+      timezone: "UTC"
+
+  # Conservative resource thresholds
+  resourceThresholds:
+    cpu:
+      min: "100m"
+      max: "16"
+    memory:
+      min: "128Mi"
+      max: "32Gi"
+
+  # Recommendation settings
+  recommendations:
+    cpuPercentile: 95
+    memoryPercentile: 95
+    safetyMargin: 1.5  # 50% buffer
+    historyDuration: "7d"
+    minSamples: 1000
+
+  # Enable HPA awareness
+  hpaAwareness:
+    enabled: true
+    conflictPolicy: Skip
+
+  # Enable PDB awareness
+  pdbAwareness:
+    enabled: true
+    respectMinAvailable: true
+
+  # Circuit breaker for safety
+  circuitBreaker:
+    enabled: true
+    errorThreshold: 3
+    successThreshold: 5
+    timeout: "10m"
+
+  # Exclude critical workloads
+  excludeWorkloads:
+    - "^kube-.*"
+    - ".*-critical$"

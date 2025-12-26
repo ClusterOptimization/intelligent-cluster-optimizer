@@ -1,0 +1,21 @@
+apiVersion: optimizer.intelligent-cluster-optimizer.io/v1alpha1
+kind: OptimizerConfig
+metadata:
+  name: basic-optimizer
+  namespace: default
+spec:
+  # Target namespaces to optimize
+  targetNamespaces:
+    - default
+    - production
+
+  # Optimization strategy
+  strategy: balanced
+
+  # Enable dry-run mode (only log recommendations, don't apply)
+  dryRun: true
+
+  # Target resource types
+  targetResources:
+    - deployments
+    - statefulsets

@@ -1,0 +1,56 @@
+apiVersion: optimizer.intelligent-cluster-optimizer.io/v1alpha1
+kind: OptimizerConfig
+metadata:
+  name: dev-optimizer
+  namespace: intelligent-optimizer-system
+spec:
+  # Development profile with aggressive settings
+  profile: development
+
+  # Override to make even more aggressive
+  profileOverrides:
+    minConfidence: 60.0
+    maxChangePercent: 50.0
+    dryRun: false  # Apply changes immediately
+
+  # Target dev namespaces
+  targetNamespaces:
+    - dev
+    - test
+    - sandbox
+
+  # Aggressive resource thresholds
+  resourceThresholds:
+    cpu:
+      min: "10m"
+      max: "4"
+    memory:
+      min: "32Mi"
+      max: "4Gi"
+
+  # Aggressive recommendation settings
+  recommendations:
+    cpuPercentile: 90
+    memoryPercentile: 90
+    safetyMargin: 1.1  # Only 10% buffer
+    historyDuration: "24h"
+    minSamples: 50
+
+  # Update strategy
+  updateStrategy:
+    type: InPlace
+
+  # Disable HPA conflict detection (dev doesn't use HPA)
+  hpaAwareness:
+    enabled: false
+
+  # Disable PDB (dev doesn't use PDB)
+  pdbAwareness:
+    enabled: false
+
+  # More lenient circuit breaker
+  circuitBreaker:
+    enabled: true
+    errorThreshold: 10
+    successThreshold: 2
+    timeout: "2m"
