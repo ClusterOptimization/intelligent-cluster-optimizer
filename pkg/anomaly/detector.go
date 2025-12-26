@@ -182,4 +182,3 @@ func determineSeverity(deviation float64) Severity {
 		return SeverityLow
 	}
 }
-
