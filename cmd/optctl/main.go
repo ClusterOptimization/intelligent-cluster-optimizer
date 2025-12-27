@@ -11,18 +11,23 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"intelligent-cluster-optimizer/pkg/cost"
 	"intelligent-cluster-optimizer/pkg/rollback"
 
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog/v2"
 )
 
 var (
-	kubeconfig  string
-	container   string
-	historyFile string
-	outputJSON  bool
+	kubeconfig   string
+	container    string
+	historyFile  string
+	outputJSON   bool
+	pricingModel string
+	allNamespaces bool
 )
 
 const defaultHistoryFile = "/var/lib/optimizer/rollback-history.json"
@@ -30,9 +35,11 @@ const defaultHistoryFile = "/var/lib/optimizer/rollback-history.json"
 func main() {
 	klog.InitFlags(nil)
 	flag.StringVar(&kubeconfig, "kubeconfig", filepath.Join(os.Getenv("HOME"), ".kube", "config"), "Path to kubeconfig")
-	flag.StringVar(&container, "container", "", "Container name (default: first container)")
+	flag.StringVar(&container, "container", "", "Container name (default: all containers)")
 	flag.StringVar(&historyFile, "history-file", defaultHistoryFile, "Path to rollback history file")
 	flag.BoolVar(&outputJSON, "json", false, "Output in JSON format")
+	flag.StringVar(&pricingModel, "pricing", "default", "Pricing model (aws-us-east-1, gcp-us-central1, azure-eastus, default)")
+	flag.BoolVar(&allNamespaces, "all-namespaces", false, "List across all namespaces (for cost command)")
 	flag.Parse()
 
 	if len(flag.Args()) < 1 {
@@ -42,22 +49,21 @@ func main() {
 
 	command := flag.Args()[0]
 
-	// History command doesn't need kubernetes client
-	if command == "history" {
+	// Commands that don't need kubernetes client
+	switch command {
+	case "history":
 		if err := handleHistory(); err != nil {
 			klog.Fatalf("History command failed: %v", err)
 		}
 		return
+	case "cost":
+		if len(flag.Args()) > 1 && flag.Args()[1] == "pricing" {
+			showPricingModels()
+			return
+		}
 	}
 
-	// Other commands need resource argument
-	if len(flag.Args()) < 2 {
-		printUsage()
-		os.Exit(1)
-	}
-
-	resource := flag.Args()[1]
-
+	// Commands that need kubernetes client
 	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
 	if err != nil {
 		klog.Fatalf("Failed to build config: %v", err)
@@ -70,8 +76,20 @@ func main() {
 
 	switch command {
 	case "rollback":
-		if err := handleRollback(kubeClient, resource); err != nil {
+		if len(flag.Args()) < 2 {
+			printUsage()
+			os.Exit(1)
+		}
+		if err := handleRollback(kubeClient, flag.Args()[1]); err != nil {
 			klog.Fatalf("Rollback failed: %v", err)
+		}
+	case "cost":
+		namespace := ""
+		if len(flag.Args()) > 1 {
+			namespace = flag.Args()[1]
+		}
+		if err := handleCost(kubeClient, namespace); err != nil {
+			klog.Fatalf("Cost calculation failed: %v", err)
 		}
 	default:
 		klog.Fatalf("Unknown command: %s", command)
@@ -81,18 +99,293 @@ func main() {
 func printUsage() {
 	fmt.Fprintf(os.Stderr, "Usage: optctl <command> [options]\n")
 	fmt.Fprintf(os.Stderr, "\nCommands:\n")
+	fmt.Fprintf(os.Stderr, "  cost [namespace]                      Calculate resource costs and savings\n")
+	fmt.Fprintf(os.Stderr, "  cost pricing                          Show available pricing models\n")
 	fmt.Fprintf(os.Stderr, "  history [resource]                    Show optimization history\n")
 	fmt.Fprintf(os.Stderr, "  rollback <namespace/kind/name>        Rollback workload to previous config\n")
 	fmt.Fprintf(os.Stderr, "\nOptions:\n")
 	fmt.Fprintf(os.Stderr, "  --kubeconfig      Path to kubeconfig (default: ~/.kube/config)\n")
-	fmt.Fprintf(os.Stderr, "  --container       Container name (default: first container)\n")
+	fmt.Fprintf(os.Stderr, "  --container       Container name (default: all containers)\n")
+	fmt.Fprintf(os.Stderr, "  --pricing         Pricing model (default: default)\n")
+	fmt.Fprintf(os.Stderr, "  --all-namespaces  Calculate costs across all namespaces\n")
 	fmt.Fprintf(os.Stderr, "  --history-file    Path to history file (default: %s)\n", defaultHistoryFile)
 	fmt.Fprintf(os.Stderr, "  --json            Output in JSON format\n")
 	fmt.Fprintf(os.Stderr, "\nExamples:\n")
-	fmt.Fprintf(os.Stderr, "  optctl history                                      # Show all history\n")
-	fmt.Fprintf(os.Stderr, "  optctl history default/Deployment/nginx             # Show history for workload\n")
-	fmt.Fprintf(os.Stderr, "  optctl rollback default/Deployment/nginx            # Rollback workload\n")
-	fmt.Fprintf(os.Stderr, "  optctl rollback prod/StatefulSet/redis --container=redis\n")
+	fmt.Fprintf(os.Stderr, "  optctl cost default                             # Cost for namespace\n")
+	fmt.Fprintf(os.Stderr, "  optctl cost --all-namespaces                    # Cost for all namespaces\n")
+	fmt.Fprintf(os.Stderr, "  optctl cost pricing                             # Show pricing models\n")
+	fmt.Fprintf(os.Stderr, "  optctl --pricing=aws-us-east-1 cost default     # Use AWS pricing\n")
+	fmt.Fprintf(os.Stderr, "  optctl history                                  # Show all history\n")
+	fmt.Fprintf(os.Stderr, "  optctl rollback default/Deployment/nginx        # Rollback workload\n")
+}
+
+func showPricingModels() {
+	fmt.Println("Available Pricing Models")
+	fmt.Println(strings.Repeat("-", 70))
+
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "MODEL\tPROVIDER\tREGION\tCPU/CORE/HR\tMEM/GB/HR\tTIER")
+
+	// Sort keys for consistent output
+	var keys []string
+	for k := range cost.DefaultPricingModels {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	for _, name := range keys {
+		model := cost.DefaultPricingModels[name]
+		fmt.Fprintf(w, "%s\t%s\t%s\t$%.4f\t$%.4f\t%s\n",
+			name,
+			model.Provider,
+			model.Region,
+			model.CPUPerCoreHour,
+			model.MemoryPerGBHour,
+			model.Tier)
+	}
+	_ = w.Flush()
+
+	fmt.Println()
+	fmt.Println("Usage: optctl --pricing=<model> cost <namespace>")
+}
+
+func handleCost(kubeClient kubernetes.Interface, namespace string) error {
+	ctx := context.Background()
+	calculator := cost.NewCalculatorWithPreset(pricingModel)
+
+	var namespaces []string
+
+	if allNamespaces || namespace == "" {
+		// Get all namespaces
+		nsList, err := kubeClient.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
+		if err != nil {
+			return fmt.Errorf("failed to list namespaces: %v", err)
+		}
+		for _, ns := range nsList.Items {
+			// Skip system namespaces
+			if !strings.HasPrefix(ns.Name, "kube-") {
+				namespaces = append(namespaces, ns.Name)
+			}
+		}
+	} else {
+		namespaces = []string{namespace}
+	}
+
+	var allWorkloads []workloadCostInfo
+	var totalCPUMillis, totalMemBytes int64
+	var totalContainers, totalReplicas int
+
+	for _, ns := range namespaces {
+		workloads, err := getNamespaceWorkloads(ctx, kubeClient, ns)
+		if err != nil {
+			klog.Warningf("Failed to get workloads for namespace %s: %v", ns, err)
+			continue
+		}
+		allWorkloads = append(allWorkloads, workloads...)
+
+		for _, w := range workloads {
+			totalCPUMillis += w.totalCPU * int64(w.replicas)
+			totalMemBytes += w.totalMemory * int64(w.replicas)
+			totalContainers += w.containerCount * int(w.replicas)
+			totalReplicas += int(w.replicas)
+		}
+	}
+
+	if len(allWorkloads) == 0 {
+		fmt.Println("No workloads found.")
+		return nil
+	}
+
+	// Calculate total costs
+	totalCost := calculator.CalculateCost(totalCPUMillis, totalMemBytes)
+
+	// Print header
+	fmt.Printf("Resource Cost Report (Pricing: %s)\n", pricingModel)
+	fmt.Println(strings.Repeat("=", 80))
+	fmt.Printf("Namespaces: %d | Workloads: %d | Containers: %d | Replicas: %d\n",
+		len(namespaces), len(allWorkloads), totalContainers, totalReplicas)
+	fmt.Println(strings.Repeat("-", 80))
+
+	// Print workload details
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "NAMESPACE\tWORKLOAD\tREPLICAS\tCPU\tMEMORY\tCOST/MONTH")
+
+	// Sort by cost (highest first)
+	sort.Slice(allWorkloads, func(i, j int) bool {
+		costI := calculator.CalculateCost(
+			allWorkloads[i].totalCPU*int64(allWorkloads[i].replicas),
+			allWorkloads[i].totalMemory*int64(allWorkloads[i].replicas))
+		costJ := calculator.CalculateCost(
+			allWorkloads[j].totalCPU*int64(allWorkloads[j].replicas),
+			allWorkloads[j].totalMemory*int64(allWorkloads[j].replicas))
+		return costI.TotalPerMonth > costJ.TotalPerMonth
+	})
+
+	for _, wl := range allWorkloads {
+		scaledCPU := wl.totalCPU * int64(wl.replicas)
+		scaledMem := wl.totalMemory * int64(wl.replicas)
+		wlCost := calculator.CalculateCost(scaledCPU, scaledMem)
+
+		fmt.Fprintf(w, "%s\t%s/%s\t%d\t%s\t%s\t$%.2f\n",
+			wl.namespace,
+			wl.kind,
+			wl.name,
+			wl.replicas,
+			formatCPU(wl.totalCPU),
+			formatMemory(wl.totalMemory),
+			wlCost.TotalPerMonth)
+	}
+	_ = w.Flush()
+
+	// Print summary
+	fmt.Println(strings.Repeat("-", 80))
+	fmt.Println("COST SUMMARY")
+	fmt.Println(strings.Repeat("-", 80))
+
+	summaryW := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintf(summaryW, "Total CPU:\t%s\t(%d millicores)\n", formatCPU(totalCPUMillis), totalCPUMillis)
+	fmt.Fprintf(summaryW, "Total Memory:\t%s\t(%d bytes)\n", formatMemory(totalMemBytes), totalMemBytes)
+	fmt.Fprintln(summaryW, "\t\t")
+	fmt.Fprintf(summaryW, "Hourly Cost:\t$%.4f\t\n", totalCost.TotalPerHour)
+	fmt.Fprintf(summaryW, "Daily Cost:\t$%.2f\t\n", totalCost.TotalPerDay)
+	fmt.Fprintf(summaryW, "Monthly Cost:\t$%.2f\t\n", totalCost.TotalPerMonth)
+	fmt.Fprintf(summaryW, "Yearly Cost:\t$%.2f\t\n", totalCost.TotalPerYear)
+	_ = summaryW.Flush()
+
+	// Show optimization tip
+	fmt.Println()
+	fmt.Println("Tip: Run the optimizer to identify potential savings.")
+
+	return nil
+}
+
+type workloadCostInfo struct {
+	namespace      string
+	kind           string
+	name           string
+	replicas       int32
+	totalCPU       int64 // millicores per replica
+	totalMemory    int64 // bytes per replica
+	containerCount int
+}
+
+func getNamespaceWorkloads(ctx context.Context, kubeClient kubernetes.Interface, namespace string) ([]workloadCostInfo, error) {
+	var workloads []workloadCostInfo
+
+	// Get Deployments
+	deploys, err := kubeClient.AppsV1().Deployments(namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list deployments: %v", err)
+	}
+
+	for _, deploy := range deploys.Items {
+		replicas := int32(1)
+		if deploy.Spec.Replicas != nil {
+			replicas = *deploy.Spec.Replicas
+		}
+
+		cpu, mem, count := sumContainerResources(deploy.Spec.Template.Spec.Containers)
+		workloads = append(workloads, workloadCostInfo{
+			namespace:      namespace,
+			kind:           "Deployment",
+			name:           deploy.Name,
+			replicas:       replicas,
+			totalCPU:       cpu,
+			totalMemory:    mem,
+			containerCount: count,
+		})
+	}
+
+	// Get StatefulSets
+	statefulsets, err := kubeClient.AppsV1().StatefulSets(namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list statefulsets: %v", err)
+	}
+
+	for _, sts := range statefulsets.Items {
+		replicas := int32(1)
+		if sts.Spec.Replicas != nil {
+			replicas = *sts.Spec.Replicas
+		}
+
+		cpu, mem, count := sumContainerResources(sts.Spec.Template.Spec.Containers)
+		workloads = append(workloads, workloadCostInfo{
+			namespace:      namespace,
+			kind:           "StatefulSet",
+			name:           sts.Name,
+			replicas:       replicas,
+			totalCPU:       cpu,
+			totalMemory:    mem,
+			containerCount: count,
+		})
+	}
+
+	// Get DaemonSets
+	daemonsets, err := kubeClient.AppsV1().DaemonSets(namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list daemonsets: %v", err)
+	}
+
+	for _, ds := range daemonsets.Items {
+		// For DaemonSets, use desired number scheduled as replica count
+		replicas := ds.Status.DesiredNumberScheduled
+		if replicas == 0 {
+			replicas = 1
+		}
+
+		cpu, mem, count := sumContainerResources(ds.Spec.Template.Spec.Containers)
+		workloads = append(workloads, workloadCostInfo{
+			namespace:      namespace,
+			kind:           "DaemonSet",
+			name:           ds.Name,
+			replicas:       replicas,
+			totalCPU:       cpu,
+			totalMemory:    mem,
+			containerCount: count,
+		})
+	}
+
+	return workloads, nil
+}
+
+func sumContainerResources(containers []corev1.Container) (cpuMillis int64, memBytes int64, count int) {
+	for _, c := range containers {
+		if cpu, ok := c.Resources.Requests[corev1.ResourceCPU]; ok {
+			cpuMillis += cpu.MilliValue()
+		}
+		if mem, ok := c.Resources.Requests[corev1.ResourceMemory]; ok {
+			memBytes += mem.Value()
+		}
+		count++
+	}
+	return
+}
+
+func formatCPU(milliCores int64) string {
+	if milliCores >= 1000 {
+		cores := float64(milliCores) / 1000.0
+		return fmt.Sprintf("%.2f cores", cores)
+	}
+	return fmt.Sprintf("%dm", milliCores)
+}
+
+func formatMemory(bytes int64) string {
+	const (
+		KB = 1024
+		MB = KB * 1024
+		GB = MB * 1024
+	)
+
+	if bytes >= GB {
+		return fmt.Sprintf("%.2f Gi", float64(bytes)/float64(GB))
+	}
+	if bytes >= MB {
+		return fmt.Sprintf("%.0f Mi", float64(bytes)/float64(MB))
+	}
+	if bytes >= KB {
+		return fmt.Sprintf("%.0f Ki", float64(bytes)/float64(KB))
+	}
+	return fmt.Sprintf("%d B", bytes)
 }
 
 func handleHistory() error {
