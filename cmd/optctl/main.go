@@ -658,12 +658,8 @@ func printClusterOverview(nodes, namespaces, workloads, containers, replicas int
 	fmt.Println("┌─────────────────────────────────────────────────────────────────────────────┐")
 	fmt.Println("│  CLUSTER OVERVIEW                                                           │")
 	fmt.Println("├─────────────────────────────────────────────────────────────────────────────┤")
-
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintf(w, "│  Nodes:\t%d\tNamespaces:\t%d\tWorkloads:\t%d\t          │\n", nodes, namespaces, workloads)
-	fmt.Fprintf(w, "│  Containers:\t%d\tReplicas:\t%d\t\t\t          │\n", containers, replicas)
-	_ = w.Flush()
-
+	fmt.Printf("│  Nodes: %-5d  Namespaces: %-5d  Workloads: %-5d                           │\n", nodes, namespaces, workloads)
+	fmt.Printf("│  Containers: %-5d  Replicas: %-5d                                          │\n", containers, replicas)
 	fmt.Println("└─────────────────────────────────────────────────────────────────────────────┘")
 	fmt.Println()
 }
@@ -672,12 +668,8 @@ func printResourceSummary(cpuMillis, memBytes int64) {
 	fmt.Println("┌─────────────────────────────────────────────────────────────────────────────┐")
 	fmt.Println("│  RESOURCE SUMMARY                                                           │")
 	fmt.Println("├─────────────────────────────────────────────────────────────────────────────┤")
-
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintf(w, "│  Total CPU Requests:\t%s\t(%d millicores)\t\t          │\n", formatCPU(cpuMillis), cpuMillis)
-	fmt.Fprintf(w, "│  Total Memory Requests:\t%s\t\t\t\t          │\n", formatMemory(memBytes))
-	_ = w.Flush()
-
+	fmt.Printf("│  Total CPU Requests:     %-10s  (%d millicores)                         │\n", formatCPU(cpuMillis), cpuMillis)
+	fmt.Printf("│  Total Memory Requests:  %-10s                                          │\n", formatMemory(memBytes))
 	fmt.Println("└─────────────────────────────────────────────────────────────────────────────┘")
 	fmt.Println()
 }
@@ -686,13 +678,9 @@ func printCostSummary(totalCost cost.ResourceCost, pricing string) {
 	fmt.Println("┌─────────────────────────────────────────────────────────────────────────────┐")
 	fmt.Println("│  COST SUMMARY                                                               │")
 	fmt.Println("├─────────────────────────────────────────────────────────────────────────────┤")
-
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintf(w, "│  Pricing Model:\t%s\t\t\t\t\t          │\n", pricing)
-	fmt.Fprintf(w, "│  Hourly:\t$%.4f\tDaily:\t$%.2f\t\t\t          │\n", totalCost.TotalPerHour, totalCost.TotalPerDay)
-	fmt.Fprintf(w, "│  Monthly:\t$%.2f\tYearly:\t$%.2f\t\t          │\n", totalCost.TotalPerMonth, totalCost.TotalPerYear)
-	_ = w.Flush()
-
+	fmt.Printf("│  Pricing Model: %-20s                                        │\n", pricing)
+	fmt.Printf("│  Hourly:  $%-10.4f  Daily:   $%-10.2f                              │\n", totalCost.TotalPerHour, totalCost.TotalPerDay)
+	fmt.Printf("│  Monthly: $%-10.2f  Yearly:  $%-10.2f                              │\n", totalCost.TotalPerMonth, totalCost.TotalPerYear)
 	fmt.Println("└─────────────────────────────────────────────────────────────────────────────┘")
 	fmt.Println()
 }
@@ -720,9 +708,7 @@ func printTopWorkloads(workloads []workloadCostInfo, calculator *cost.Calculator
 		return costI.TotalPerMonth > costJ.TotalPerMonth
 	})
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "│  NAMESPACE\tWORKLOAD\tCPU\tMEMORY\tCOST/MO\t  │")
-	fmt.Fprintln(w, "│  ─────────\t────────\t───\t──────\t───────\t  │")
+	fmt.Printf("│  %-18s %-22s %6s %8s %9s   │\n", "NAMESPACE", "WORKLOAD", "CPU", "MEMORY", "COST/MO")
 
 	count := limit
 	if len(workloads) < limit {
@@ -735,19 +721,22 @@ func printTopWorkloads(workloads []workloadCostInfo, calculator *cost.Calculator
 		scaledMem := wl.totalMemory * int64(wl.replicas)
 		wlCost := calculator.CalculateCost(scaledCPU, scaledMem)
 
+		ns := wl.namespace
+		if len(ns) > 18 {
+			ns = ns[:15] + "..."
+		}
 		name := wl.name
-		if len(name) > 20 {
-			name = name[:17] + "..."
+		if len(name) > 22 {
+			name = name[:19] + "..."
 		}
 
-		fmt.Fprintf(w, "│  %s\t%s\t%s\t%s\t$%.2f\t  │\n",
-			wl.namespace,
+		fmt.Printf("│  %-18s %-22s %6s %8s $%-8.2f   │\n",
+			ns,
 			name,
 			formatCPU(wl.totalCPU),
 			formatMemory(wl.totalMemory),
 			wlCost.TotalPerMonth)
 	}
-	_ = w.Flush()
 
 	fmt.Println("└─────────────────────────────────────────────────────────────────────────────┘")
 	fmt.Println()
@@ -793,9 +782,7 @@ func printRecentHistory(history map[string][]rollback.WorkloadConfig, limit int)
 		return entries[i].timestamp.After(entries[j].timestamp)
 	})
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "│  WORKLOAD\tCONTAINER\tCPU\tMEMORY\tAGE\t  │")
-	fmt.Fprintln(w, "│  ────────\t─────────\t───\t──────\t───\t  │")
+	fmt.Printf("│  %-25s %-12s %6s %8s %8s   │\n", "WORKLOAD", "CONTAINER", "CPU", "MEMORY", "AGE")
 
 	count := limit
 	if len(entries) < limit {
@@ -810,15 +797,18 @@ func printRecentHistory(history map[string][]rollback.WorkloadConfig, limit int)
 		if len(workload) > 25 {
 			workload = workload[:22] + "..."
 		}
+		container := e.container
+		if len(container) > 12 {
+			container = container[:9] + "..."
+		}
 
-		fmt.Fprintf(w, "│  %s\t%s\t%s\t%s\t%s\t  │\n",
+		fmt.Printf("│  %-25s %-12s %6s %8s %8s   │\n",
 			workload,
-			e.container,
+			container,
 			e.cpu,
 			e.memory,
 			age)
 	}
-	_ = w.Flush()
 
 	fmt.Println("└─────────────────────────────────────────────────────────────────────────────┘")
 	fmt.Println()
