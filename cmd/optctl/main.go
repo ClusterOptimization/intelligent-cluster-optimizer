@@ -22,11 +22,11 @@ import (
 )
 
 var (
-	kubeconfig   string
-	container    string
-	historyFile  string
-	outputJSON   bool
-	pricingModel string
+	kubeconfig    string
+	container     string
+	historyFile   string
+	outputJSON    bool
+	pricingModel  string
 	allNamespaces bool
 )
 
