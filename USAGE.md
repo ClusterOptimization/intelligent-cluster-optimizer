@@ -123,12 +123,61 @@ kubectl logs -n intelligent-optimizer-system \
 
 ## CLI Tool (optctl)
 
-The `optctl` CLI provides commands for cost analysis, history tracking, and rollback operations.
+The `optctl` CLI provides commands for cluster monitoring, cost analysis, history tracking, and rollback operations.
 
 ### Building the CLI
 
 ```bash
 go build -o bin/optctl ./cmd/optctl/
+```
+
+### Dashboard
+
+Get a quick overview of your cluster with the dashboard command:
+
+```bash
+# Show cluster dashboard
+optctl dashboard
+
+# With specific pricing model
+optctl --pricing=aws-us-east-1 dashboard
+```
+
+**What the Dashboard Shows:**
+
+| Section | Information |
+|---------|-------------|
+| Cluster Overview | Nodes, namespaces, workloads, containers, replicas |
+| Resource Summary | Total CPU and memory requests |
+| Cost Summary | Hourly, daily, monthly, yearly costs |
+| Top Workloads | Top 5 workloads by cost |
+| Recent History | Last 5 optimization entries |
+| Quick Commands | Common optctl commands reference |
+
+**Sample Output:**
+```
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                    INTELLIGENT CLUSTER OPTIMIZER                              ║
+║                           Dashboard v1.2.0                                    ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+┌─ CLUSTER OVERVIEW ───────────────────────────────────────────────────────────┐
+│  Nodes: 3    Namespaces: 5    Workloads: 12    Containers: 18    Replicas: 24 │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌─ RESOURCE SUMMARY ───────────────────────────────────────────────────────────┐
+│  Total CPU Requests:     4.50 cores                                          │
+│  Total Memory Requests:  8.00 Gi                                             │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌─ COST SUMMARY (aws-us-east-1) ───────────────────────────────────────────────┐
+│  Hourly:   $0.25     Daily:    $6.00     Monthly:  $180.00    Yearly: $2190   │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌─ TOP WORKLOADS BY COST ──────────────────────────────────────────────────────┐
+│  1. prod/Deployment/api           $45.36/mo    500m CPU    512Mi Memory      │
+│  2. prod/StatefulSet/postgres     $34.56/mo    1 core      2Gi Memory        │
+└──────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Cost Calculator

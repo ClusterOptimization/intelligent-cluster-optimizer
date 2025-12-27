@@ -257,16 +257,47 @@ kubectl apply -f config/crd/
 
 ## CLI Reference (optctl)
 
-The `optctl` CLI provides commands for cost analysis, history tracking, and rollback operations.
+The `optctl` CLI provides commands for cluster monitoring, cost analysis, history tracking, and rollback operations.
 
 ### Commands
 
 | Command | Description |
 |---------|-------------|
+| `dashboard` | Show cluster overview with resources, costs, and history |
 | `cost [namespace]` | Calculate resource costs for workloads |
 | `cost pricing` | Show available cloud pricing models |
 | `history [resource]` | Show optimization history |
 | `rollback <resource>` | Rollback workload to previous configuration |
+
+### Dashboard
+
+Get a quick overview of your cluster:
+
+```bash
+# Show cluster dashboard
+optctl dashboard
+```
+
+**Sample Output:**
+```
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                    INTELLIGENT CLUSTER OPTIMIZER                              ║
+║                           Dashboard v1.2.0                                    ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+┌─ CLUSTER OVERVIEW ───────────────────────────────────────────────────────────┐
+│  Nodes: 3    Namespaces: 5    Workloads: 12    Containers: 18    Replicas: 24 │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌─ RESOURCE SUMMARY ───────────────────────────────────────────────────────────┐
+│  Total CPU Requests:     4.50 cores                                          │
+│  Total Memory Requests:  8.00 Gi                                             │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌─ COST SUMMARY (aws-us-east-1) ───────────────────────────────────────────────┐
+│  Hourly:   $0.25     Daily:    $6.00     Monthly:  $180.00    Yearly: $2190   │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
 
 ### Cost Calculator
 

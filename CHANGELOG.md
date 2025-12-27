@@ -12,6 +12,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 #### CLI Enhancements (optctl)
+- Dashboard command (`optctl dashboard`)
+  - Cluster overview (nodes, namespaces, workloads, containers, replicas)
+  - Resource summary (total CPU/memory requests)
+  - Cost summary with hourly, daily, monthly, yearly breakdown
+  - Top 5 workloads by cost
+  - Recent 5 optimization history entries
+  - Quick commands reference
+  - Box-drawing characters for visual appeal
 - Cost calculator command (`optctl cost`)
   - Calculate resource costs for namespaces and workloads
   - Support for multiple cloud pricing models (AWS, GCP, Azure)

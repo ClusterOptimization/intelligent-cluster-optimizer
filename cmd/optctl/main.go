@@ -91,6 +91,10 @@ func main() {
 		if err := handleCost(kubeClient, namespace); err != nil {
 			klog.Fatalf("Cost calculation failed: %v", err)
 		}
+	case "dashboard":
+		if err := handleDashboard(kubeClient); err != nil {
+			klog.Fatalf("Dashboard failed: %v", err)
+		}
 	default:
 		klog.Fatalf("Unknown command: %s", command)
 	}
@@ -99,6 +103,7 @@ func main() {
 func printUsage() {
 	fmt.Fprintf(os.Stderr, "Usage: optctl <command> [options]\n")
 	fmt.Fprintf(os.Stderr, "\nCommands:\n")
+	fmt.Fprintf(os.Stderr, "  dashboard                             Show cluster overview dashboard\n")
 	fmt.Fprintf(os.Stderr, "  cost [namespace]                      Calculate resource costs and savings\n")
 	fmt.Fprintf(os.Stderr, "  cost pricing                          Show available pricing models\n")
 	fmt.Fprintf(os.Stderr, "  history [resource]                    Show optimization history\n")
@@ -111,6 +116,7 @@ func printUsage() {
 	fmt.Fprintf(os.Stderr, "  --history-file    Path to history file (default: %s)\n", defaultHistoryFile)
 	fmt.Fprintf(os.Stderr, "  --json            Output in JSON format\n")
 	fmt.Fprintf(os.Stderr, "\nExamples:\n")
+	fmt.Fprintf(os.Stderr, "  optctl dashboard                                # Show cluster dashboard\n")
 	fmt.Fprintf(os.Stderr, "  optctl cost default                             # Cost for namespace\n")
 	fmt.Fprintf(os.Stderr, "  optctl cost --all-namespaces                    # Cost for all namespaces\n")
 	fmt.Fprintf(os.Stderr, "  optctl cost pricing                             # Show pricing models\n")
@@ -572,4 +578,260 @@ func formatAge(d time.Duration) string {
 	}
 	days := int(d.Hours() / 24)
 	return fmt.Sprintf("%dd", days)
+}
+
+func handleDashboard(kubeClient kubernetes.Interface) error {
+	ctx := context.Background()
+	calculator := cost.NewCalculatorWithPreset(pricingModel)
+
+	// Get cluster info
+	nodes, err := kubeClient.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to list nodes: %v", err)
+	}
+
+	namespaceList, err := kubeClient.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to list namespaces: %v", err)
+	}
+
+	// Collect workload data
+	var allWorkloads []workloadCostInfo
+	var totalCPUMillis, totalMemBytes int64
+	var totalContainers, totalReplicas int
+	namespaceCounts := make(map[string]int)
+
+	for _, ns := range namespaceList.Items {
+		if strings.HasPrefix(ns.Name, "kube-") {
+			continue
+		}
+
+		workloads, err := getNamespaceWorkloads(ctx, kubeClient, ns.Name)
+		if err != nil {
+			continue
+		}
+
+		namespaceCounts[ns.Name] = len(workloads)
+		allWorkloads = append(allWorkloads, workloads...)
+
+		for _, w := range workloads {
+			totalCPUMillis += w.totalCPU * int64(w.replicas)
+			totalMemBytes += w.totalMemory * int64(w.replicas)
+			totalContainers += w.containerCount * int(w.replicas)
+			totalReplicas += int(w.replicas)
+		}
+	}
+
+	// Calculate total costs
+	totalCost := calculator.CalculateCost(totalCPUMillis, totalMemBytes)
+
+	// Load history
+	historyManager := rollback.NewRollbackManager(nil)
+	_ = historyManager.LoadFromFile(historyFile)
+	history := historyManager.GetAllHistory()
+	historyCount := historyManager.GetHistoryCount()
+
+	// Print dashboard
+	printDashboardHeader()
+	printClusterOverview(len(nodes.Items), len(namespaceList.Items), len(allWorkloads), totalContainers, totalReplicas)
+	printResourceSummary(totalCPUMillis, totalMemBytes)
+	printCostSummary(totalCost, pricingModel)
+	printTopWorkloads(allWorkloads, calculator, 5)
+	printRecentHistory(history, 5)
+	printQuickStats(historyCount, len(allWorkloads))
+
+	return nil
+}
+
+func printDashboardHeader() {
+	now := time.Now().Format("2006-01-02 15:04:05")
+	fmt.Println()
+	fmt.Println("╔══════════════════════════════════════════════════════════════════════════════╗")
+	fmt.Println("║                    INTELLIGENT CLUSTER OPTIMIZER                             ║")
+	fmt.Println("║                           Dashboard                                          ║")
+	fmt.Println("╚══════════════════════════════════════════════════════════════════════════════╝")
+	fmt.Printf("  Generated: %s\n", now)
+	fmt.Println()
+}
+
+func printClusterOverview(nodes, namespaces, workloads, containers, replicas int) {
+	fmt.Println("┌─────────────────────────────────────────────────────────────────────────────┐")
+	fmt.Println("│  CLUSTER OVERVIEW                                                           │")
+	fmt.Println("├─────────────────────────────────────────────────────────────────────────────┤")
+
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintf(w, "│  Nodes:\t%d\tNamespaces:\t%d\tWorkloads:\t%d\t          │\n", nodes, namespaces, workloads)
+	fmt.Fprintf(w, "│  Containers:\t%d\tReplicas:\t%d\t\t\t          │\n", containers, replicas)
+	_ = w.Flush()
+
+	fmt.Println("└─────────────────────────────────────────────────────────────────────────────┘")
+	fmt.Println()
+}
+
+func printResourceSummary(cpuMillis, memBytes int64) {
+	fmt.Println("┌─────────────────────────────────────────────────────────────────────────────┐")
+	fmt.Println("│  RESOURCE SUMMARY                                                           │")
+	fmt.Println("├─────────────────────────────────────────────────────────────────────────────┤")
+
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintf(w, "│  Total CPU Requests:\t%s\t(%d millicores)\t\t          │\n", formatCPU(cpuMillis), cpuMillis)
+	fmt.Fprintf(w, "│  Total Memory Requests:\t%s\t\t\t\t          │\n", formatMemory(memBytes))
+	_ = w.Flush()
+
+	fmt.Println("└─────────────────────────────────────────────────────────────────────────────┘")
+	fmt.Println()
+}
+
+func printCostSummary(totalCost cost.ResourceCost, pricing string) {
+	fmt.Println("┌─────────────────────────────────────────────────────────────────────────────┐")
+	fmt.Println("│  COST SUMMARY                                                               │")
+	fmt.Println("├─────────────────────────────────────────────────────────────────────────────┤")
+
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintf(w, "│  Pricing Model:\t%s\t\t\t\t\t          │\n", pricing)
+	fmt.Fprintf(w, "│  Hourly:\t$%.4f\tDaily:\t$%.2f\t\t\t          │\n", totalCost.TotalPerHour, totalCost.TotalPerDay)
+	fmt.Fprintf(w, "│  Monthly:\t$%.2f\tYearly:\t$%.2f\t\t          │\n", totalCost.TotalPerMonth, totalCost.TotalPerYear)
+	_ = w.Flush()
+
+	fmt.Println("└─────────────────────────────────────────────────────────────────────────────┘")
+	fmt.Println()
+}
+
+func printTopWorkloads(workloads []workloadCostInfo, calculator *cost.Calculator, limit int) {
+	fmt.Println("┌─────────────────────────────────────────────────────────────────────────────┐")
+	fmt.Println("│  TOP WORKLOADS BY COST                                                      │")
+	fmt.Println("├─────────────────────────────────────────────────────────────────────────────┤")
+
+	if len(workloads) == 0 {
+		fmt.Println("│  No workloads found                                                         │")
+		fmt.Println("└─────────────────────────────────────────────────────────────────────────────┘")
+		fmt.Println()
+		return
+	}
+
+	// Sort by cost
+	sort.Slice(workloads, func(i, j int) bool {
+		costI := calculator.CalculateCost(
+			workloads[i].totalCPU*int64(workloads[i].replicas),
+			workloads[i].totalMemory*int64(workloads[i].replicas))
+		costJ := calculator.CalculateCost(
+			workloads[j].totalCPU*int64(workloads[j].replicas),
+			workloads[j].totalMemory*int64(workloads[j].replicas))
+		return costI.TotalPerMonth > costJ.TotalPerMonth
+	})
+
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "│  NAMESPACE\tWORKLOAD\tCPU\tMEMORY\tCOST/MO\t  │")
+	fmt.Fprintln(w, "│  ─────────\t────────\t───\t──────\t───────\t  │")
+
+	count := limit
+	if len(workloads) < limit {
+		count = len(workloads)
+	}
+
+	for i := 0; i < count; i++ {
+		wl := workloads[i]
+		scaledCPU := wl.totalCPU * int64(wl.replicas)
+		scaledMem := wl.totalMemory * int64(wl.replicas)
+		wlCost := calculator.CalculateCost(scaledCPU, scaledMem)
+
+		name := wl.name
+		if len(name) > 20 {
+			name = name[:17] + "..."
+		}
+
+		fmt.Fprintf(w, "│  %s\t%s\t%s\t%s\t$%.2f\t  │\n",
+			wl.namespace,
+			name,
+			formatCPU(wl.totalCPU),
+			formatMemory(wl.totalMemory),
+			wlCost.TotalPerMonth)
+	}
+	_ = w.Flush()
+
+	fmt.Println("└─────────────────────────────────────────────────────────────────────────────┘")
+	fmt.Println()
+}
+
+func printRecentHistory(history map[string][]rollback.WorkloadConfig, limit int) {
+	fmt.Println("┌─────────────────────────────────────────────────────────────────────────────┐")
+	fmt.Println("│  RECENT OPTIMIZATION HISTORY                                                │")
+	fmt.Println("├─────────────────────────────────────────────────────────────────────────────┤")
+
+	if len(history) == 0 {
+		fmt.Println("│  No optimization history found                                              │")
+		fmt.Println("│  Run: optctl history --help for more info                                   │")
+		fmt.Println("└─────────────────────────────────────────────────────────────────────────────┘")
+		fmt.Println()
+		return
+	}
+
+	// Collect and sort entries
+	type entry struct {
+		workload  string
+		container string
+		cpu       string
+		memory    string
+		timestamp time.Time
+	}
+
+	var entries []entry
+	for _, configs := range history {
+		for _, config := range configs {
+			workload := fmt.Sprintf("%s/%s", config.Namespace, config.Name)
+			entries = append(entries, entry{
+				workload:  workload,
+				container: config.ContainerName,
+				cpu:       config.CPU,
+				memory:    config.Memory,
+				timestamp: config.Timestamp,
+			})
+		}
+	}
+
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].timestamp.After(entries[j].timestamp)
+	})
+
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "│  WORKLOAD\tCONTAINER\tCPU\tMEMORY\tAGE\t  │")
+	fmt.Fprintln(w, "│  ────────\t─────────\t───\t──────\t───\t  │")
+
+	count := limit
+	if len(entries) < limit {
+		count = len(entries)
+	}
+
+	for i := 0; i < count; i++ {
+		e := entries[i]
+		age := formatAge(time.Since(e.timestamp))
+
+		workload := e.workload
+		if len(workload) > 25 {
+			workload = workload[:22] + "..."
+		}
+
+		fmt.Fprintf(w, "│  %s\t%s\t%s\t%s\t%s\t  │\n",
+			workload,
+			e.container,
+			e.cpu,
+			e.memory,
+			age)
+	}
+	_ = w.Flush()
+
+	fmt.Println("└─────────────────────────────────────────────────────────────────────────────┘")
+	fmt.Println()
+}
+
+func printQuickStats(historyCount, workloadCount int) {
+	fmt.Println("┌─────────────────────────────────────────────────────────────────────────────┐")
+	fmt.Println("│  QUICK COMMANDS                                                             │")
+	fmt.Println("├─────────────────────────────────────────────────────────────────────────────┤")
+	fmt.Println("│  optctl cost <namespace>     - Calculate costs for a namespace              │")
+	fmt.Println("│  optctl history              - View full optimization history               │")
+	fmt.Println("│  optctl rollback <resource>  - Rollback to previous configuration           │")
+	fmt.Println("│  optctl cost pricing         - View available pricing models                │")
+	fmt.Println("└─────────────────────────────────────────────────────────────────────────────┘")
+	fmt.Println()
 }
