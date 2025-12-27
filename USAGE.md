@@ -4,6 +4,7 @@
 
 - [Quick Start](#quick-start)
 - [Installation](#installation)
+- [CLI Tool (optctl)](#cli-tool-optctl)
 - [Configuration](#configuration)
 - [Common Use Cases](#common-use-cases)
 - [Monitoring](#monitoring)
@@ -119,6 +120,119 @@ kubectl get pods -n intelligent-optimizer-system
 kubectl logs -n intelligent-optimizer-system \
   deployment/intelligent-optimizer-controller
 ```
+
+## CLI Tool (optctl)
+
+The `optctl` CLI provides commands for cost analysis, history tracking, and rollback operations.
+
+### Building the CLI
+
+```bash
+go build -o bin/optctl ./cmd/optctl/
+```
+
+### Cost Calculator
+
+Calculate resource costs for your cluster using cloud provider pricing:
+
+```bash
+# Show available pricing models
+optctl cost pricing
+
+# Calculate costs for a namespace
+optctl cost production
+
+# Use AWS pricing model
+optctl --pricing=aws-us-east-1 cost production
+
+# Use spot instance pricing
+optctl --pricing=aws-us-east-1-spot cost production
+
+# Calculate costs across all namespaces
+optctl --all-namespaces cost
+```
+
+**Available Pricing Models:**
+
+| Model | Provider | Description |
+|-------|----------|-------------|
+| `default` | Generic | Conservative estimate |
+| `aws-us-east-1` | AWS | On-demand pricing |
+| `aws-us-east-1-spot` | AWS | Spot instance (~70% savings) |
+| `gcp-us-central1` | GCP | On-demand pricing |
+| `azure-eastus` | Azure | On-demand pricing |
+
+**Sample Output:**
+```
+Resource Cost Report (Pricing: aws-us-east-1)
+================================================================================
+Namespaces: 1 | Workloads: 5 | Containers: 8 | Replicas: 12
+--------------------------------------------------------------------------------
+NAMESPACE  WORKLOAD              REPLICAS  CPU         MEMORY    COST/MONTH
+prod       Deployment/api        3         500m        512 Mi    $45.36
+prod       StatefulSet/postgres  1         1.00 cores  2.00 Gi   $34.56
+--------------------------------------------------------------------------------
+COST SUMMARY
+--------------------------------------------------------------------------------
+Total CPU:      2.50 cores
+Total Memory:   4.00 Gi
+Monthly Cost:   $89.86
+Yearly Cost:    $1093.01
+```
+
+### History Tracking
+
+View optimization history and previous configurations:
+
+```bash
+# Show all optimization history
+optctl history
+
+# Show history for specific workload
+optctl --container=nginx history default/Deployment/nginx
+
+# Use custom history file
+optctl --history-file=/custom/path/history.json history
+```
+
+**Sample Output:**
+```
+Optimization History (3 entries across 2 workloads)
+--------------------------------------------------------------------------------
+WORKLOAD                  CONTAINER  CPU   MEMORY  TIMESTAMP         AGE
+default/Deployment/nginx  nginx      200m  256Mi   2025-12-27 12:00  2h
+default/Deployment/nginx  nginx      100m  128Mi   2025-12-27 10:00  4h
+prod/StatefulSet/redis    redis      500m  512Mi   2025-12-26 08:00  1d
+```
+
+### Rollback Operations
+
+Revert workloads to previous resource configurations:
+
+```bash
+# Rollback to previous configuration
+optctl rollback default/Deployment/nginx
+
+# Rollback specific container
+optctl --container=app rollback prod/StatefulSet/redis
+```
+
+The rollback command:
+1. Loads history from the persistent history file
+2. Finds the previous configuration for the workload
+3. Applies the previous resource requests
+4. Updates the history file
+
+### CLI Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--kubeconfig` | Path to kubeconfig | `~/.kube/config` |
+| `--container` | Target container name | First container |
+| `--pricing` | Pricing model for cost | `default` |
+| `--all-namespaces` | Operate across all namespaces | `false` |
+| `--history-file` | Path to history file | `/var/lib/optimizer/rollback-history.json` |
+| `--json` | Output in JSON format | `false` |
 
 ## Configuration
 

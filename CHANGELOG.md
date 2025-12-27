@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2025-12-28
+
+### Added
+
+#### CLI Enhancements (optctl)
+- Cost calculator command (`optctl cost`)
+  - Calculate resource costs for namespaces and workloads
+  - Support for multiple cloud pricing models (AWS, GCP, Azure)
+  - Spot instance pricing support
+  - Cross-namespace cost aggregation (`--all-namespaces`)
+  - Detailed cost breakdown (hourly, daily, monthly, yearly)
+  - Workloads sorted by cost (highest first)
+- History tracking command (`optctl history`)
+  - View all optimization history
+  - Filter by specific workload
+  - Shows CPU, memory, timestamp, and age
+  - Sorted by most recent first
+- Enhanced rollback command
+  - Persistent history file support
+  - Automatic history loading/saving
+
+#### Rollback Manager Improvements
+- `GetAllHistory()` - Retrieve all stored history entries
+- `GetWorkloadHistory()` - Get history for specific workload
+- `GetHistoryCount()` - Count total history entries
+- Thread-safe history access with copy-on-read
+
 ## [1.1.0] - 2025-12-27
 
 ### Added
