@@ -253,3 +253,44 @@ func (r *RollbackManager) LoadFromFile(filename string) error {
 
 	return json.Unmarshal(data, &r.history)
 }
+
+// GetAllHistory returns all stored history entries
+func (r *RollbackManager) GetAllHistory() map[string][]WorkloadConfig {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	// Return a copy to prevent mutation
+	result := make(map[string][]WorkloadConfig, len(r.history))
+	for k, v := range r.history {
+		configsCopy := make([]WorkloadConfig, len(v))
+		copy(configsCopy, v)
+		result[k] = configsCopy
+	}
+	return result
+}
+
+// GetWorkloadHistory returns history for a specific workload
+func (r *RollbackManager) GetWorkloadHistory(namespace, kind, name, containerName string) []WorkloadConfig {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	key := namespace + "/" + kind + "/" + name + "/" + containerName
+	configs := r.history[key]
+
+	// Return a copy
+	result := make([]WorkloadConfig, len(configs))
+	copy(result, configs)
+	return result
+}
+
+// GetHistoryCount returns the total number of history entries
+func (r *RollbackManager) GetHistoryCount() int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	count := 0
+	for _, configs := range r.history {
+		count += len(configs)
+	}
+	return count
+}
