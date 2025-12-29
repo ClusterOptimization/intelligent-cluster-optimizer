@@ -643,6 +643,15 @@ func handleDashboard(kubeClient kubernetes.Interface) error {
 	return nil
 }
 
+// boxLine formats content to fit exactly within the dashboard box (75 chars content width)
+func boxLine(content string) string {
+	const width = 75
+	if len(content) > width {
+		content = content[:width]
+	}
+	return fmt.Sprintf("│  %-73s│", content)
+}
+
 func printDashboardHeader() {
 	now := time.Now().Format("2006-01-02 15:04:05")
 	fmt.Println()
@@ -658,8 +667,8 @@ func printClusterOverview(nodes, namespaces, workloads, containers, replicas int
 	fmt.Println("┌─────────────────────────────────────────────────────────────────────────────┐")
 	fmt.Println("│  CLUSTER OVERVIEW                                                           │")
 	fmt.Println("├─────────────────────────────────────────────────────────────────────────────┤")
-	fmt.Printf("│  Nodes: %-5d  Namespaces: %-5d  Workloads: %-5d                           │\n", nodes, namespaces, workloads)
-	fmt.Printf("│  Containers: %-5d  Replicas: %-5d                                          │\n", containers, replicas)
+	fmt.Println(boxLine(fmt.Sprintf("Nodes: %-6d Namespaces: %-6d Workloads: %-6d", nodes, namespaces, workloads)))
+	fmt.Println(boxLine(fmt.Sprintf("Containers: %-6d Replicas: %-6d", containers, replicas)))
 	fmt.Println("└─────────────────────────────────────────────────────────────────────────────┘")
 	fmt.Println()
 }
@@ -668,8 +677,8 @@ func printResourceSummary(cpuMillis, memBytes int64) {
 	fmt.Println("┌─────────────────────────────────────────────────────────────────────────────┐")
 	fmt.Println("│  RESOURCE SUMMARY                                                           │")
 	fmt.Println("├─────────────────────────────────────────────────────────────────────────────┤")
-	fmt.Printf("│  Total CPU Requests:     %-10s  (%d millicores)                         │\n", formatCPU(cpuMillis), cpuMillis)
-	fmt.Printf("│  Total Memory Requests:  %-10s                                          │\n", formatMemory(memBytes))
+	fmt.Println(boxLine(fmt.Sprintf("Total CPU Requests:    %-10s (%d millicores)", formatCPU(cpuMillis), cpuMillis)))
+	fmt.Println(boxLine(fmt.Sprintf("Total Memory Requests: %-10s", formatMemory(memBytes))))
 	fmt.Println("└─────────────────────────────────────────────────────────────────────────────┘")
 	fmt.Println()
 }
@@ -678,9 +687,9 @@ func printCostSummary(totalCost cost.ResourceCost, pricing string) {
 	fmt.Println("┌─────────────────────────────────────────────────────────────────────────────┐")
 	fmt.Println("│  COST SUMMARY                                                               │")
 	fmt.Println("├─────────────────────────────────────────────────────────────────────────────┤")
-	fmt.Printf("│  Pricing Model: %-20s                                        │\n", pricing)
-	fmt.Printf("│  Hourly:  $%-10.4f  Daily:   $%-10.2f                              │\n", totalCost.TotalPerHour, totalCost.TotalPerDay)
-	fmt.Printf("│  Monthly: $%-10.2f  Yearly:  $%-10.2f                              │\n", totalCost.TotalPerMonth, totalCost.TotalPerYear)
+	fmt.Println(boxLine(fmt.Sprintf("Pricing Model: %s", pricing)))
+	fmt.Println(boxLine(fmt.Sprintf("Hourly:  $%-10.4f Daily:  $%-10.2f", totalCost.TotalPerHour, totalCost.TotalPerDay)))
+	fmt.Println(boxLine(fmt.Sprintf("Monthly: $%-10.2f Yearly: $%-10.2f", totalCost.TotalPerMonth, totalCost.TotalPerYear)))
 	fmt.Println("└─────────────────────────────────────────────────────────────────────────────┘")
 	fmt.Println()
 }
@@ -691,7 +700,7 @@ func printTopWorkloads(workloads []workloadCostInfo, calculator *cost.Calculator
 	fmt.Println("├─────────────────────────────────────────────────────────────────────────────┤")
 
 	if len(workloads) == 0 {
-		fmt.Println("│  No workloads found                                                         │")
+		fmt.Println(boxLine("No workloads found"))
 		fmt.Println("└─────────────────────────────────────────────────────────────────────────────┘")
 		fmt.Println()
 		return
@@ -708,7 +717,7 @@ func printTopWorkloads(workloads []workloadCostInfo, calculator *cost.Calculator
 		return costI.TotalPerMonth > costJ.TotalPerMonth
 	})
 
-	fmt.Printf("│  %-18s %-22s %6s %8s %9s   │\n", "NAMESPACE", "WORKLOAD", "CPU", "MEMORY", "COST/MO")
+	fmt.Println(boxLine(fmt.Sprintf("%-17s %-20s %6s %8s %9s", "NAMESPACE", "WORKLOAD", "CPU", "MEMORY", "COST/MO")))
 
 	count := limit
 	if len(workloads) < limit {
@@ -722,20 +731,20 @@ func printTopWorkloads(workloads []workloadCostInfo, calculator *cost.Calculator
 		wlCost := calculator.CalculateCost(scaledCPU, scaledMem)
 
 		ns := wl.namespace
-		if len(ns) > 18 {
-			ns = ns[:15] + "..."
+		if len(ns) > 17 {
+			ns = ns[:14] + "..."
 		}
 		name := wl.name
-		if len(name) > 22 {
-			name = name[:19] + "..."
+		if len(name) > 20 {
+			name = name[:17] + "..."
 		}
 
-		fmt.Printf("│  %-18s %-22s %6s %8s $%-8.2f   │\n",
+		fmt.Println(boxLine(fmt.Sprintf("%-17s %-20s %6s %8s $%-8.2f",
 			ns,
 			name,
 			formatCPU(wl.totalCPU),
 			formatMemory(wl.totalMemory),
-			wlCost.TotalPerMonth)
+			wlCost.TotalPerMonth)))
 	}
 
 	fmt.Println("└─────────────────────────────────────────────────────────────────────────────┘")
@@ -748,8 +757,8 @@ func printRecentHistory(history map[string][]rollback.WorkloadConfig, limit int)
 	fmt.Println("├─────────────────────────────────────────────────────────────────────────────┤")
 
 	if len(history) == 0 {
-		fmt.Println("│  No optimization history found                                              │")
-		fmt.Println("│  Run: optctl history --help for more info                                   │")
+		fmt.Println(boxLine("No optimization history found"))
+		fmt.Println(boxLine("Run: optctl history --help for more info"))
 		fmt.Println("└─────────────────────────────────────────────────────────────────────────────┘")
 		fmt.Println()
 		return
@@ -782,7 +791,7 @@ func printRecentHistory(history map[string][]rollback.WorkloadConfig, limit int)
 		return entries[i].timestamp.After(entries[j].timestamp)
 	})
 
-	fmt.Printf("│  %-25s %-12s %6s %8s %8s   │\n", "WORKLOAD", "CONTAINER", "CPU", "MEMORY", "AGE")
+	fmt.Println(boxLine(fmt.Sprintf("%-25s %-12s %6s %8s %8s", "WORKLOAD", "CONTAINER", "CPU", "MEMORY", "AGE")))
 
 	count := limit
 	if len(entries) < limit {
@@ -802,12 +811,12 @@ func printRecentHistory(history map[string][]rollback.WorkloadConfig, limit int)
 			container = container[:9] + "..."
 		}
 
-		fmt.Printf("│  %-25s %-12s %6s %8s %8s   │\n",
+		fmt.Println(boxLine(fmt.Sprintf("%-25s %-12s %6s %8s %8s",
 			workload,
 			container,
 			e.cpu,
 			e.memory,
-			age)
+			age)))
 	}
 
 	fmt.Println("└─────────────────────────────────────────────────────────────────────────────┘")
