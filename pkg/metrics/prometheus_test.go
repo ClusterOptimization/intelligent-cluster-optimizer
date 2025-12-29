@@ -326,4 +326,91 @@ func TestNewPrometheusExporter(t *testing.T) {
 	if exporter.ParetoFrontSize == nil {
 		t.Error("ParetoFrontSize not initialized")
 	}
+	if exporter.PodStartupDuration == nil {
+		t.Error("PodStartupDuration not initialized")
+	}
+	if exporter.PodStartupDurationAvg == nil {
+		t.Error("PodStartupDurationAvg not initialized")
+	}
+	if exporter.PodStartupDurationP95 == nil {
+		t.Error("PodStartupDurationP95 not initialized")
+	}
+	if exporter.SlowStartupsTotal == nil {
+		t.Error("SlowStartupsTotal not initialized")
+	}
+}
+
+func TestPrometheusExporter_RecordPodStartupMetrics(t *testing.T) {
+	registry := prometheus.NewRegistry()
+
+	exporter := &PrometheusExporter{
+		PodStartupDuration: prometheus.NewHistogramVec(
+			prometheus.HistogramOpts{
+				Namespace: "test",
+				Name:      "pod_startup_duration_seconds",
+				Help:      "Test metric",
+				Buckets:   []float64{1, 2, 5, 10, 15, 20, 30, 45, 60, 90, 120},
+			},
+			[]string{"workload", "namespace", "container"},
+		),
+		PodStartupDurationAvg: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Namespace: "test",
+				Name:      "pod_startup_duration_avg_seconds",
+				Help:      "Test metric",
+			},
+			[]string{"workload", "namespace"},
+		),
+		PodStartupDurationP95: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Namespace: "test",
+				Name:      "pod_startup_duration_p95_seconds",
+				Help:      "Test metric",
+			},
+			[]string{"workload", "namespace"},
+		),
+		SlowStartupsTotal: prometheus.NewCounterVec(
+			prometheus.CounterOpts{
+				Namespace: "test",
+				Name:      "slow_startups_total",
+				Help:      "Test metric",
+			},
+			[]string{"workload", "namespace", "threshold"},
+		),
+	}
+
+	registry.MustRegister(exporter.PodStartupDuration)
+	registry.MustRegister(exporter.PodStartupDurationAvg)
+	registry.MustRegister(exporter.PodStartupDurationP95)
+	registry.MustRegister(exporter.SlowStartupsTotal)
+
+	// Record startup times
+	exporter.RecordPodStartupDuration("nginx", "default", "app", 12.5)
+	exporter.RecordPodStartupDuration("nginx", "default", "app", 8.0)
+	exporter.RecordPodStartupDuration("nginx", "default", "app", 25.0)
+
+	// Record average and P95
+	exporter.RecordPodStartupDurationAvg("nginx", "default", 15.17)
+	exporter.RecordPodStartupDurationP95("nginx", "default", 24.0)
+
+	// Record slow startups
+	exporter.RecordSlowStartup("nginx", "default", 20.0)
+
+	// Verify average gauge
+	avg := testutil.ToFloat64(exporter.PodStartupDurationAvg.WithLabelValues("nginx", "default"))
+	if avg != 15.17 {
+		t.Errorf("Expected average 15.17, got %f", avg)
+	}
+
+	// Verify P95 gauge
+	p95 := testutil.ToFloat64(exporter.PodStartupDurationP95.WithLabelValues("nginx", "default"))
+	if p95 != 24.0 {
+		t.Errorf("Expected P95 24.0, got %f", p95)
+	}
+
+	// Verify slow startup counter
+	slow := testutil.ToFloat64(exporter.SlowStartupsTotal.WithLabelValues("nginx", "default", "20s"))
+	if slow != 1.0 {
+		t.Errorf("Expected slow startups 1.0, got %f", slow)
+	}
 }

@@ -332,3 +332,110 @@ func generateSequence(start, end int) []float64 {
 	}
 	return result
 }
+
+func TestMonitor_CheckStartupTimeSLA(t *testing.T) {
+	monitor := NewMonitor()
+
+	sla := SLADefinition{
+		Name:        "startup-time-sla",
+		Type:        SLATypeStartupTime,
+		Target:      10.0, // 10 seconds target
+		Threshold:   5.0,  // 5 seconds tolerance (max 15s)
+		Window:      5 * time.Minute,
+		Description: "Pod startup time SLA",
+	}
+
+	err := monitor.AddSLA(sla)
+	if err != nil {
+		t.Fatalf("Failed to add SLA: %v", err)
+	}
+
+	now := time.Now()
+
+	// Test case 1: All pods start fast (no violations)
+	fastMetrics := []Metric{
+		{Timestamp: now.Add(-4 * time.Minute), Value: 8.0},  // 8 seconds
+		{Timestamp: now.Add(-3 * time.Minute), Value: 10.0}, // 10 seconds
+		{Timestamp: now.Add(-2 * time.Minute), Value: 12.0}, // 12 seconds
+		{Timestamp: now.Add(-1 * time.Minute), Value: 9.0},  // 9 seconds
+	}
+
+	violations, err := monitor.CheckSLA("startup-time-sla", fastMetrics)
+	if err != nil {
+		t.Fatalf("Failed to check SLA: %v", err)
+	}
+
+	if len(violations) > 0 {
+		t.Errorf("Expected no violations for fast startups, got %d", len(violations))
+	}
+
+	// Test case 2: Slow pod startups (violations expected)
+	slowMetrics := []Metric{
+		{Timestamp: now.Add(-4 * time.Minute), Value: 20.0}, // 20 seconds (slow)
+		{Timestamp: now.Add(-3 * time.Minute), Value: 25.0}, // 25 seconds (slow)
+		{Timestamp: now.Add(-2 * time.Minute), Value: 18.0}, // 18 seconds (slow)
+		{Timestamp: now.Add(-1 * time.Minute), Value: 22.0}, // 22 seconds (slow)
+	}
+
+	violations, err = monitor.CheckSLA("startup-time-sla", slowMetrics)
+	if err != nil {
+		t.Fatalf("Failed to check SLA: %v", err)
+	}
+
+	if len(violations) == 0 {
+		t.Error("Expected violations for slow pod startups")
+	}
+
+	t.Logf("Found %d violations", len(violations))
+	for _, v := range violations {
+		t.Logf("Violation: %s (severity: %.2f)", v.Message, v.Severity)
+	}
+}
+
+func TestMonitor_CheckStartupTimeSLA_Percentile(t *testing.T) {
+	monitor := NewMonitor()
+
+	sla := SLADefinition{
+		Name:        "startup-time-p95",
+		Type:        SLATypeStartupTime,
+		Target:      15.0, // 15 seconds target
+		Threshold:   5.0,  // 5 seconds tolerance (max 20s for P95)
+		Percentile:  95.0, // P95
+		Window:      5 * time.Minute,
+		Description: "P95 pod startup time SLA",
+	}
+
+	err := monitor.AddSLA(sla)
+	if err != nil {
+		t.Fatalf("Failed to add SLA: %v", err)
+	}
+
+	now := time.Now()
+
+	// Most pods fast, but P95 is slow
+	metrics := []Metric{
+		{Timestamp: now.Add(-9 * time.Minute), Value: 5.0},
+		{Timestamp: now.Add(-8 * time.Minute), Value: 6.0},
+		{Timestamp: now.Add(-7 * time.Minute), Value: 7.0},
+		{Timestamp: now.Add(-6 * time.Minute), Value: 8.0},
+		{Timestamp: now.Add(-5 * time.Minute), Value: 9.0},
+		{Timestamp: now.Add(-4 * time.Minute), Value: 10.0},
+		{Timestamp: now.Add(-3 * time.Minute), Value: 11.0},
+		{Timestamp: now.Add(-2 * time.Minute), Value: 12.0},
+		{Timestamp: now.Add(-1 * time.Minute), Value: 30.0}, // Slow outlier
+		{Timestamp: now, Value: 35.0},                       // Slow outlier
+	}
+
+	violations, err := monitor.CheckSLA("startup-time-p95", metrics)
+	if err != nil {
+		t.Fatalf("Failed to check SLA: %v", err)
+	}
+
+	if len(violations) == 0 {
+		t.Error("Expected P95 violation for slow startup times")
+	}
+
+	for _, v := range violations {
+		t.Logf("P95 Violation: %s", v.Message)
+	}
+}

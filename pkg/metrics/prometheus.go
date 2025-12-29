@@ -1,6 +1,8 @@
 package metrics
 
 import (
+	"fmt"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
@@ -38,6 +40,12 @@ type PrometheusExporter struct {
 	// Pareto optimization metrics
 	ParetoFrontSize *prometheus.GaugeVec
 	ParetoSolutions *prometheus.CounterVec
+
+	// Pod startup time metrics
+	PodStartupDuration    *prometheus.HistogramVec
+	PodStartupDurationAvg *prometheus.GaugeVec
+	PodStartupDurationP95 *prometheus.GaugeVec
+	SlowStartupsTotal     *prometheus.CounterVec
 }
 
 // NewPrometheusExporter creates a new Prometheus metrics exporter
@@ -201,6 +209,41 @@ func NewPrometheusExporter(namespace string) *PrometheusExporter {
 			},
 			[]string{"config", "namespace"},
 		),
+
+		// Pod startup time metrics
+		PodStartupDuration: promauto.NewHistogramVec(
+			prometheus.HistogramOpts{
+				Namespace: namespace,
+				Name:      "pod_startup_duration_seconds",
+				Help:      "Time from pod creation to ready state in seconds",
+				Buckets:   []float64{1, 2, 5, 10, 15, 20, 30, 45, 60, 90, 120},
+			},
+			[]string{"workload", "namespace", "container"},
+		),
+		PodStartupDurationAvg: promauto.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Namespace: namespace,
+				Name:      "pod_startup_duration_avg_seconds",
+				Help:      "Average pod startup time in seconds",
+			},
+			[]string{"workload", "namespace"},
+		),
+		PodStartupDurationP95: promauto.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Namespace: namespace,
+				Name:      "pod_startup_duration_p95_seconds",
+				Help:      "P95 pod startup time in seconds",
+			},
+			[]string{"workload", "namespace"},
+		),
+		SlowStartupsTotal: promauto.NewCounterVec(
+			prometheus.CounterOpts{
+				Namespace: namespace,
+				Name:      "slow_startups_total",
+				Help:      "Total number of pods that exceeded startup time threshold",
+			},
+			[]string{"workload", "namespace", "threshold"},
+		),
 	}
 }
 
@@ -288,4 +331,25 @@ func (e *PrometheusExporter) RecordParetoFrontSize(config, namespace string, siz
 // RecordParetoSolution records a Pareto optimal solution
 func (e *PrometheusExporter) RecordParetoSolution(config, namespace string) {
 	e.ParetoSolutions.WithLabelValues(config, namespace).Inc()
+}
+
+// RecordPodStartupDuration records a single pod startup time
+func (e *PrometheusExporter) RecordPodStartupDuration(workload, namespace, container string, seconds float64) {
+	e.PodStartupDuration.WithLabelValues(workload, namespace, container).Observe(seconds)
+}
+
+// RecordPodStartupDurationAvg records the average pod startup time for a workload
+func (e *PrometheusExporter) RecordPodStartupDurationAvg(workload, namespace string, seconds float64) {
+	e.PodStartupDurationAvg.WithLabelValues(workload, namespace).Set(seconds)
+}
+
+// RecordPodStartupDurationP95 records the P95 pod startup time for a workload
+func (e *PrometheusExporter) RecordPodStartupDurationP95(workload, namespace string, seconds float64) {
+	e.PodStartupDurationP95.WithLabelValues(workload, namespace).Set(seconds)
+}
+
+// RecordSlowStartup records a pod that exceeded the startup time threshold
+func (e *PrometheusExporter) RecordSlowStartup(workload, namespace string, thresholdSeconds float64) {
+	threshold := fmt.Sprintf("%.0fs", thresholdSeconds)
+	e.SlowStartupsTotal.WithLabelValues(workload, namespace, threshold).Inc()
 }

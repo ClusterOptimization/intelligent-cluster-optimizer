@@ -27,6 +27,9 @@ const (
 	// SLATypeThroughput monitors requests per second
 	SLATypeThroughput SLAType = "throughput"
 
+	// SLATypeStartupTime monitors pod startup time (time from created to ready)
+	SLATypeStartupTime SLAType = "startup_time"
+
 	// SLATypeCustom allows custom SLA definitions
 	SLATypeCustom SLAType = "custom"
 )
@@ -227,6 +230,7 @@ func ValidateSLADefinition(sla SLADefinition) error {
 		SLATypeErrorRate:    true,
 		SLATypeAvailability: true,
 		SLATypeThroughput:   true,
+		SLATypeStartupTime:  true,
 		SLATypeCustom:       true,
 	}
 

@@ -138,6 +138,8 @@ func (m *DefaultMonitor) checkSLAViolations(sla SLADefinition, metrics []Metric)
 		violations = m.checkAvailabilitySLA(sla, windowMetrics)
 	case SLATypeThroughput:
 		violations = m.checkThroughputSLA(sla, windowMetrics)
+	case SLATypeStartupTime:
+		violations = m.checkStartupTimeSLA(sla, windowMetrics)
 	case SLATypeCustom:
 		violations = m.checkCustomSLA(sla, windowMetrics)
 	default:
@@ -310,6 +312,76 @@ func (m *DefaultMonitor) checkThroughputSLA(sla SLADefinition, metrics []Metric)
 			Severity:      severity,
 			Message:       fmt.Sprintf("Throughput %.2f req/s below threshold %.2f req/s", avgThroughput, threshold),
 		})
+	}
+
+	return violations
+}
+
+// checkStartupTimeSLA checks startup time SLA violations
+// Metrics represent pod startup times in seconds (time from created to ready)
+func (m *DefaultMonitor) checkStartupTimeSLA(sla SLADefinition, metrics []Metric) []SLAViolation {
+	var violations []SLAViolation
+
+	if len(metrics) == 0 {
+		return violations
+	}
+
+	// If percentile is specified, check percentile startup time
+	if sla.Percentile > 0 {
+		values := make([]float64, len(metrics))
+		for i, metric := range metrics {
+			values[i] = metric.Value
+		}
+
+		percentileValue := calculatePercentile(values, sla.Percentile)
+		threshold := sla.Target + sla.Threshold
+
+		if percentileValue > threshold {
+			severity := (percentileValue - threshold) / threshold
+			if severity > 1.0 {
+				severity = 1.0
+			}
+
+			violations = append(violations, SLAViolation{
+				SLA:           sla,
+				Timestamp:     time.Now(),
+				ActualValue:   percentileValue,
+				ExpectedValue: threshold,
+				Severity:      severity,
+				Message:       fmt.Sprintf("P%.0f startup time %.2fs exceeds threshold %.2fs", sla.Percentile, percentileValue, threshold),
+			})
+		}
+	} else {
+		// Calculate average startup time
+		var sum float64
+		var slowCount int
+		threshold := sla.Target + sla.Threshold
+
+		for _, metric := range metrics {
+			sum += metric.Value
+			if metric.Value > threshold {
+				slowCount++
+			}
+		}
+
+		avgStartupTime := sum / float64(len(metrics))
+
+		// Violation if average exceeds threshold
+		if avgStartupTime > threshold {
+			severity := (avgStartupTime - threshold) / threshold
+			if severity > 1.0 {
+				severity = 1.0
+			}
+
+			violations = append(violations, SLAViolation{
+				SLA:           sla,
+				Timestamp:     time.Now(),
+				ActualValue:   avgStartupTime,
+				ExpectedValue: threshold,
+				Severity:      severity,
+				Message:       fmt.Sprintf("Average startup time %.2fs exceeds threshold %.2fs (%d/%d pods slow)", avgStartupTime, threshold, slowCount, len(metrics)),
+			})
+		}
 	}
 
 	return violations
