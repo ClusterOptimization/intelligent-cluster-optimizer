@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -15,31 +16,40 @@ import (
 )
 
 func main() {
-	// 1. Setup Kubeconfig
+	// 1. Parse command line flags
+	namespace := flag.String("namespace", "", "Target namespace to collect metrics from")
+	pollIntervalStr := flag.String("interval", "", "Poll interval (e.g., 10s, 1m)")
+	flag.Parse()
+
+	// 2. Fall back to environment variables if flags not provided
+	if *namespace == "" {
+		*namespace = os.Getenv("TARGET_NAMESPACE")
+		if *namespace == "" {
+			*namespace = "default"
+		}
+	}
+
+	if *pollIntervalStr == "" {
+		*pollIntervalStr = os.Getenv("POLL_INTERVAL")
+		if *pollIntervalStr == "" {
+			*pollIntervalStr = "30s"
+		}
+	}
+
+	pollInterval, err := time.ParseDuration(*pollIntervalStr)
+	if err != nil {
+		log.Fatalf("Invalid interval format '%s': %v. Use format like '30s', '1m', '2m30s'", *pollIntervalStr, err)
+	}
+
+	// 3. Setup Kubeconfig
 	kubeconfig := filepath.Join(os.Getenv("HOME"), ".kube", "config")
 	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	// 2. Read Configuration from Environment Variables (12-Factor App)
-	namespace := os.Getenv("TARGET_NAMESPACE")
-	if namespace == "" {
-		namespace = "default" // Default namespace
-	}
-
-	pollIntervalStr := os.Getenv("POLL_INTERVAL")
-	if pollIntervalStr == "" {
-		pollIntervalStr = "30s" // Default poll interval
-	}
-
-	pollInterval, err := time.ParseDuration(pollIntervalStr)
-	if err != nil {
-		log.Fatalf("Invalid POLL_INTERVAL format '%s': %v. Use format like '30s', '1m', '2m30s'", pollIntervalStr, err)
-	}
-
 	fmt.Printf("Configuration:\n")
-	fmt.Printf("  - Target Namespace: %s\n", namespace)
+	fmt.Printf("  - Target Namespace: %s\n", *namespace)
 	fmt.Printf("  - Poll Interval: %s\n", pollInterval)
 	fmt.Println()
 
@@ -80,7 +90,7 @@ func main() {
 
 	for range ticker.C {
 		// A. Fetch
-		data, err := collector.GetPodMetrics(namespace)
+		data, err := collector.GetPodMetrics(*namespace)
 		if err != nil {
 			log.Printf("Error fetching metrics: %v", err)
 			continue
