@@ -101,7 +101,7 @@ func main() {
 	for {
 		select {
 		case <-sigChan:
-			fmt.Println("\n")
+			fmt.Println()
 			printSummary(startTime, sampleCount, podStats)
 			return
 		case <-ticker.C:
@@ -155,13 +155,13 @@ func main() {
 }
 
 type podStatistics struct {
-	cpuSum   int64
-	memSum   int64
-	cpuMin   int64
-	cpuMax   int64
-	memMin   int64
-	memMax   int64
-	count    int
+	cpuSum int64
+	memSum int64
+	cpuMin int64
+	cpuMax int64
+	memMin int64
+	memMax int64
+	count  int
 }
 
 func (s *podStatistics) update(cpu, mem int64) {
