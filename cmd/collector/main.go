@@ -63,7 +63,7 @@ func main() {
 
 	// initialize storage
 	store := storage.NewStorage()
-	dataFile := "metrics_data.json"
+	dataFile := fmt.Sprintf("metrics_data_%s.json", *namespace)
 
 	// load existing data on startup
 	if err := store.LoadFromFile(dataFile); err != nil {
