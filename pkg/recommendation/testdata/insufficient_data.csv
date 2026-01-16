@@ -1,0 +1,8 @@
+# Insufficient Data Pattern - Only 5 samples (less than minimum 10)
+# Expected: Low confidence score, no recommendation generated
+# Format: timestamp_offset_minutes,cpu_millicores,memory_bytes,request_cpu,request_memory
+0,200,536870912,500,1073741824
+10,210,553648128,500,1073741824
+20,195,545259520,500,1073741824
+30,205,562036736,500,1073741824
+40,200,553648128,500,1073741824
